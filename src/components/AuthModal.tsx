@@ -5,10 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { Trophy, Users, Shield, Loader2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, Mail, Lock, User, Phone, Globe } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 interface AuthModalProps {
   type: 'signin' | 'signup';
@@ -17,218 +16,194 @@ interface AuthModalProps {
 }
 
 const AuthModal = ({ type, onClose, onSwitchType }: AuthModalProps) => {
+  const { signIn, signUp } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    confirmPassword: '',
     fullName: '',
-    role: 'player',
     phone: '',
-    country: ''
+    country: '',
+    role: 'player' as 'player' | 'league_admin'
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
+    setError(null);
+
+    try {
+      if (type === 'signin') {
+        const { error } = await signIn(formData.email, formData.password);
+        if (error) throw error;
+        onClose();
+      } else {
+        const { error } = await signUp(formData.email, formData.password, {
+          fullName: formData.fullName,
+          phone: formData.phone,
+          country: formData.country,
+          role: formData.role
+        });
+        if (error) throw error;
+        setError('Please check your email to confirm your account.');
+      }
+    } catch (err: any) {
+      console.error('Auth error:', err);
+      setError(err.message || 'An error occurred');
+    } finally {
       setLoading(false);
-      console.log('Auth attempt:', { type, formData });
-      // For demo purposes, we'll just close the modal
-      onClose();
-    }, 2000);
+    }
   };
 
-  const roleOptions = [
-    {
-      value: 'player',
-      label: 'Player',
-      description: 'Join leagues and compete',
-      icon: Users,
-      color: 'bg-blue-500'
-    },
-    {
-      value: 'league_admin',
-      label: 'League Admin',
-      description: 'Create and manage leagues',
-      icon: Trophy,
-      color: 'bg-green-600'
-    },
-    {
-      value: 'super_admin',
-      label: 'Super Admin',
-      description: 'Full system access',
-      icon: Shield,
-      color: 'bg-purple-600'
-    }
-  ];
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-2xl text-center">
+          <DialogTitle className="text-center text-2xl font-bold">
             {type === 'signin' ? 'Welcome Back' : 'Join Padel League Ace'}
           </DialogTitle>
         </DialogHeader>
-        
-        <Tabs value={type} onValueChange={(value) => onSwitchType(value as 'signin' | 'signup')}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="signin">Sign In</TabsTrigger>
-            <TabsTrigger value="signup">Sign Up</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="signin" className="space-y-4">
-            <form onSubmit={handleSubmit} className="space-y-4">
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <Alert className={error.includes('check your email') ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
+              <AlertDescription className={error.includes('check your email') ? 'text-green-700' : 'text-red-700'}>
+                {error}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {type === 'signup' && (
+            <>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  required
-                />
-              </div>
-              
-              <Button type="submit" className="w-full gradient-padel text-white" disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Sign In
-              </Button>
-            </form>
-          </TabsContent>
-          
-          <TabsContent value="signup" className="space-y-6">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
+                <Label htmlFor="fullName">Full Name</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="fullName"
-                    placeholder="John Doe"
+                    type="text"
+                    placeholder="Enter your full name"
                     value={formData.fullName}
-                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                    required
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="your@email.com"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    onChange={(e) => handleInputChange('fullName', e.target.value)}
+                    className="pl-10"
                     required
                   />
                 </div>
               </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm Password</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    placeholder="••••••••"
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    required
-                  />
-                </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="role">Account Type</Label>
+                <Select
+                  value={formData.role}
+                  onValueChange={(value) => handleInputChange('role', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="player">Player</SelectItem>
+                    <SelectItem value="league_admin">League Administrator</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone (Optional)</Label>
+            </>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="email"
+                type="email"
+                placeholder="Enter your email"
+                value={formData.email}
+                onChange={(e) => handleInputChange('email', e.target.value)}
+                className="pl-10"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="password"
+                type="password"
+                placeholder="Enter your password"
+                value={formData.password}
+                onChange={(e) => handleInputChange('password', e.target.value)}
+                className="pl-10"
+                required
+                minLength={6}
+              />
+            </div>
+          </div>
+
+          {type === 'signup' && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone (Optional)</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="phone"
                     type="tel"
-                    placeholder="+1 234 567 8900"
+                    placeholder="Enter your phone number"
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    className="pl-10"
                   />
                 </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="country">Country</Label>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="country">Country (Optional)</Label>
+                <div className="relative">
+                  <Globe className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="country"
-                    placeholder="United States"
+                    type="text"
+                    placeholder="Enter your country"
                     value={formData.country}
-                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                    required
+                    onChange={(e) => handleInputChange('country', e.target.value)}
+                    className="pl-10"
                   />
                 </div>
               </div>
-              
-              <div className="space-y-3">
-                <Label>Account Type</Label>
-                <div className="grid gap-3">
-                  {roleOptions.map((role) => (
-                    <div
-                      key={role.value}
-                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                        formData.role === role.value
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                      onClick={() => setFormData({ ...formData, role: role.value })}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 ${role.color} rounded-full flex items-center justify-center`}>
-                          <role.icon className="w-5 h-5 text-white" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-semibold">{role.label}</h4>
-                            {role.value === 'league_admin' && (
-                              <Badge variant="secondary" className="text-xs">Approval Required</Badge>
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground">{role.description}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              <Button type="submit" className="w-full gradient-padel text-white" disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Create Account
-              </Button>
-            </form>
-          </TabsContent>
-        </Tabs>
+            </>
+          )}
+
+          <Button
+            type="submit"
+            className="w-full gradient-padel text-white"
+            disabled={loading}
+          >
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {type === 'signin' ? 'Sign In' : 'Create Account'}
+          </Button>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => onSwitchType(type === 'signin' ? 'signup' : 'signin')}
+              className="text-primary hover:underline"
+              disabled={loading}
+            >
+              {type === 'signin' 
+                ? "Don't have an account? Sign up" 
+                : 'Already have an account? Sign in'
+              }
+            </button>
+          </div>
+        </form>
       </DialogContent>
     </Dialog>
   );
