@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +8,8 @@ import { Trophy, Users, Calendar, TrendingUp, Star, CheckCircle, LogOut, User } 
 import AuthModal from '@/components/AuthModal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
+import Header from '@/components/Header';
+
 
 const Index = () => {
   const [authModal, setAuthModal] = useState<'signin' | 'signup' | null>(null);
@@ -35,36 +38,7 @@ const Index = () => {
     return (
       <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
         {/* Header */}
-        <header className="border-b bg-background/80 backdrop-blur">
-          <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                Padel League Ace
-              </h1>
-              <Badge className="bg-secondary text-secondary-foreground">
-                {profile.role === 'super_admin' ? 'Super Admin' : 
-                 profile.role === 'league_admin' ? 'League Admin' : 'Player'}
-              </Badge>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <User className="w-4 h-4" />
-                <span className="text-sm font-medium">{profile.full_name}</span>
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={signOut}
-                className="flex items-center gap-2"
-              >
-                <LogOut className="w-4 h-4" />
-                Sign Out
-              </Button>
-            </div>
-          </div>
-        </header>
-
+        <Header />
         {/* Dashboard Content */}
         <div className="container mx-auto px-4 py-8">
           <div className="mb-8">
@@ -78,6 +52,47 @@ const Index = () => {
           </div>
 
           {/* Role-specific dashboard cards */}
+          {profile.role === 'super_admin' && (
+  <>
+                <Card className="hover:shadow-lg transition-shadow border-purple-200">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Users className="w-5 h-5 text-purple-600" />
+                      Admin Panel
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-muted-foreground mb-4">
+                      Manage users, approve League Administrators, and system settings.
+                    </p>
+                    <Link to="/admin">
+                      <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white">
+                        Open Admin Panel
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+
+                <Card className="hover:shadow-lg transition-shadow border-yellow-200">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <CheckCircle className="w-5 h-5 text-yellow-600" />
+                      Pending Approvals
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-muted-foreground mb-4">
+                      Review and approve League Administrator applications.
+                    </p>
+                    <Link to="/admin">
+                      <Button variant="outline" className="w-full border-yellow-300 text-yellow-700 hover:bg-yellow-50">
+                        Review Applications
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {profile.role === 'league_admin' && profile.is_approved && (
               <Card className="hover:shadow-lg transition-shadow">
@@ -91,9 +106,11 @@ const Index = () => {
                   <p className="text-muted-foreground mb-4">
                     Set up a new padel league with custom divisions and rules.
                   </p>
-                  <Button className="w-full gradient-padel text-white">
-                    New League
-                  </Button>
+                  <Link to="/create-league">
+                    <Button className="w-full gradient-padel text-white">
+                      New League
+                    </Button>
+                  </Link>
                 </CardContent>
               </Card>
             )}
@@ -109,9 +126,11 @@ const Index = () => {
                 <p className="text-muted-foreground mb-4">
                   View and manage your padel teams.
                 </p>
-                <Button variant="outline" className="w-full">
-                  View Teams
-                </Button>
+                <Link to="/teams">
+                  <Button variant="outline" className="w-full">
+                    View Teams
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
 
@@ -126,9 +145,11 @@ const Index = () => {
                 <p className="text-muted-foreground mb-4">
                   Check your scheduled matches and results.
                 </p>
-                <Button variant="outline" className="w-full">
-                  View Schedule
-                </Button>
+                <Link to="/matches">
+                  <Button variant="outline" className="w-full">
+                    View Schedule
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
 
@@ -143,9 +164,11 @@ const Index = () => {
                 <p className="text-muted-foreground mb-4">
                   Browse and join available leagues.
                 </p>
-                <Button variant="outline" className="w-full">
-                  Browse Leagues
-                </Button>
+                <Link to="/leagues">
+                  <Button variant="outline" className="w-full">
+                    Browse Leagues
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
           </div>
@@ -367,3 +390,4 @@ const Index = () => {
 };
 
 export default Index;
+

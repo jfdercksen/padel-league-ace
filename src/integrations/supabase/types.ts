@@ -53,6 +53,7 @@ export type Database = {
           matches_won: number | null
           points: number | null
           registered_at: string | null
+          status: string | null
           team_id: string
         }
         Insert: {
@@ -63,6 +64,7 @@ export type Database = {
           matches_won?: number | null
           points?: number | null
           registered_at?: string | null
+          status?: string | null
           team_id: string
         }
         Update: {
@@ -73,6 +75,7 @@ export type Database = {
           matches_won?: number | null
           points?: number | null
           registered_at?: string | null
+          status?: string | null
           team_id?: string
         }
         Relationships: [
@@ -269,6 +272,51 @@ export type Database = {
         }
         Relationships: []
       }
+      team_invitations: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+          invited_by: string
+          status: string | null
+          team_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id?: string
+          invited_by: string
+          status?: string | null
+          team_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+          invited_by?: string
+          status?: string | null
+          team_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_invitations_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_invitations_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       teams: {
         Row: {
           created_at: string | null
@@ -276,7 +324,7 @@ export type Database = {
           id: string
           name: string
           player1_id: string
-          player2_id: string
+          player2_id: string | null
         }
         Insert: {
           created_at?: string | null
@@ -284,7 +332,7 @@ export type Database = {
           id?: string
           name: string
           player1_id: string
-          player2_id: string
+          player2_id?: string | null
         }
         Update: {
           created_at?: string | null
@@ -292,7 +340,7 @@ export type Database = {
           id?: string
           name?: string
           player1_id?: string
-          player2_id?: string
+          player2_id?: string | null
         }
         Relationships: [
           {

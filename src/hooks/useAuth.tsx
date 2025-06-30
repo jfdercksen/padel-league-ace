@@ -1,4 +1,3 @@
-
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,6 +24,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Helper function to create profile
+  const createProfile = async (user: User, metadata?: any) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          full_name: metadata?.fullName || '',
+          email: user.email || '',
+          phone: metadata?.phone || '',
+          country: metadata?.country || '',
+          role: metadata?.role || 'player',
+          is_approved: metadata?.role === 'league_admin' ? false : true
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error creating profile:', error);
+      return null;
+    }
+  };
+
   useEffect(() => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -44,6 +68,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             if (profileData) {
               setProfile(profileData);
+            } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+              // Profile doesn't exist, create it from user metadata
+              const metadata = session.user.user_metadata;
+              const newProfile = await createProfile(session.user, metadata);
+              if (newProfile) {
+                setProfile(newProfile);
+              }
             }
           }, 0);
         } else {
@@ -67,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (email: string, password: string, metadata?: any) => {
     const redirectUrl = `${window.location.origin}/`;
     
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -75,6 +106,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         data: metadata
       }
     });
+    
+    // If signup successful and user is immediately available (email confirmation disabled)
+    if (!error && data.user && data.user.email_confirmed_at) {
+      // Create profile immediately
+      const newProfile = await createProfile(data.user, metadata);
+      if (newProfile) {
+        setProfile(newProfile);
+      }
+    }
     
     return { error };
   };
