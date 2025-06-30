@@ -151,36 +151,39 @@ const ManageLeague = () => {
   };
 
   const fetchTeamRegistrations = async () => {
-    if (!leagueId) return;
-    
-    setLoadingRegistrations(true);
-    try {
-      const { data, error } = await supabase
-        .from('league_registrations')
-        .select(`
-          *,
-          team:teams (
-            id,
-            name,
-            player1_id,
-            player2_id,
-            player1:profiles!teams_player1_id_fkey(full_name, email),
-            player2:profiles!teams_player2_id_fkey(full_name, email)
-          ),
-          division:divisions (name, level)
-        `)
-        .eq('league_id', leagueId)
-        .order('registered_at', { ascending: false });
+  if (!leagueId) return;
+  
+  console.log('Fetching registrations for league:', leagueId); // Add this
+  
+      setLoadingRegistrations(true);
+      try {
+        const { data, error } = await supabase
+          .from('league_registrations')
+          .select(`
+            *,
+            team:teams (
+              id,
+              name,
+              player1_id,
+              player2_id,
+              player1:profiles!teams_player1_id_fkey(full_name, email),
+              player2:profiles!teams_player2_id_fkey(full_name, email)
+            ),
+            division:divisions (name, level)
+          `)
+          .eq('league_id', leagueId)
+          .order('registered_at', { ascending: false });
 
-      if (error) throw error;
-      console.log('Team registrations fetched:', data); // Debug log
-      setTeamRegistrations(data || []);
-    } catch (error) {
-      console.error('Error fetching team registrations:', error);
-    } finally {
-      setLoadingRegistrations(false);
-    }
-  };
+        console.log('Registration query result:', { data, error }); // Add this
+
+        if (error) throw error;
+        setTeamRegistrations(data || []);
+      } catch (error) {
+        console.error('Error fetching team registrations:', error);
+      } finally {
+        setLoadingRegistrations(false);
+      }
+    };
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({

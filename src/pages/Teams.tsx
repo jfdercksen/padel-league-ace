@@ -52,67 +52,127 @@ useEffect(() => {
     if (!profile) return;
 
     try {
-      // Fetch teams where user is a member
-      const { data: teamsData, error: teamsError } = await supabase
-        .from('teams')
-        .select(`
-          *,
-          player1:profiles!teams_player1_id_fkey(full_name, email),
-          player2:profiles!teams_player2_id_fkey(full_name, email)
-        `)
-        .or(`player1_id.eq.${profile.id},player2_id.eq.${profile.id}`)
-        .order('created_at', { ascending: false });
+      if (profile.role === 'league_admin') {
+        // League Admin: Show teams registered for their leagues
+        
+        // First, get leagues created by this admin
+        const { data: adminLeagues, error: leaguesError } = await supabase
+          .from('leagues')
+          .select('id, name')
+          .eq('created_by', profile.id);
 
-      console.log('Teams data:', teamsData, 'Error:', teamsError); // Debug log
+        if (leaguesError) throw leaguesError;
 
-      if (teamsError) throw teamsError;
+        const leagueIds = adminLeagues?.map(league => league.id) || [];
+        
+        if (leagueIds.length > 0) {
+          // Get all team registrations for admin's leagues
+          const { data: registrationsData, error: regsError } = await supabase
+            .from('league_registrations')
+            .select(`
+              *,
+              team:teams(
+                id,
+                name,
+                player1_id,
+                player2_id,
+                player1:profiles!teams_player1_id_fkey(full_name, email),
+                player2:profiles!teams_player2_id_fkey(full_name, email)
+              ),
+              league:leagues(name),
+              division:divisions(name, level)
+            `)
+            .in('league_id', leagueIds)
+            .order('registered_at', { ascending: false });
 
-      // Fetch team registrations for all teams
-      const teamIds = teamsData?.map(team => team.id) || [];
-      console.log('Team IDs:', teamIds); // Debug log
-      
-      let registrationsData = [];
-      
-      if (teamIds.length > 0) {
-        const { data: regsData, error: regsError } = await supabase
-          .from('league_registrations')
+          if (regsError) throw regsError;
+
+          // Transform the data to match the existing team structure
+          const teamsWithRegistrations = registrationsData?.map(reg => ({
+            ...reg.team,
+            registrations: [{
+              id: reg.id,
+              league: reg.league,
+              division: reg.division,
+              status: reg.status,
+              registered_at: reg.registered_at
+            }]
+          })) || [];
+
+          setTeams(teamsWithRegistrations);
+        } else {
+          setTeams([]);
+        }
+        
+        // No invitations for league admins
+        setInvitations([]);
+
+      } else {
+        // Player: Existing logic (keep as is)
+        
+        // Fetch teams where user is a member
+        const { data: teamsData, error: teamsError } = await supabase
+          .from('teams')
           .select(`
             *,
-            league:leagues(name, start_date, end_date),
-            division:divisions(name, level)
+            player1:profiles!teams_player1_id_fkey(full_name, email),
+            player2:profiles!teams_player2_id_fkey(full_name, email)
           `)
-          .in('team_id', teamIds)
-          .order('registered_at', { ascending: false });
+          .or(`player1_id.eq.${profile.id},player2_id.eq.${profile.id}`)
+          .order('created_at', { ascending: false });
 
-        console.log('Registrations data:', regsData, 'Error:', regsError); // Debug log
+        console.log('Teams data:', teamsData, 'Error:', teamsError);
 
-        if (regsError) throw regsError;
-        registrationsData = regsData || [];
+        if (teamsError) throw teamsError;
+
+        // Fetch team registrations for all teams
+        const teamIds = teamsData?.map(team => team.id) || [];
+        console.log('Team IDs:', teamIds);
+        
+        let registrationsData = [];
+        
+        if (teamIds.length > 0) {
+          const { data: regsData, error: regsError } = await supabase
+            .from('league_registrations')
+            .select(`
+              *,
+              league:leagues(name, start_date, end_date),
+              division:divisions(name, level)
+            `)
+            .in('team_id', teamIds)
+            .order('registered_at', { ascending: false });
+
+          console.log('Registrations data:', regsData, 'Error:', regsError);
+
+          if (regsError) throw regsError;
+          registrationsData = regsData || [];
+        }
+
+        // Add registrations to teams
+        const teamsWithRegistrations = teamsData?.map(team => ({
+          ...team,
+          registrations: registrationsData.filter(reg => reg.team_id === team.id)
+        })) || [];
+
+        console.log('Teams with registrations:', teamsWithRegistrations);
+
+        // Fetch pending invitations for players
+        const { data: invitationsData, error: invitationsError } = await supabase
+          .from('team_invitations')
+          .select(`
+            *,
+            team:teams(name, created_by)
+          `)
+          .eq('email', profile.email)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+
+        if (invitationsError) throw invitationsError;
+
+        setTeams(teamsWithRegistrations);
+        setInvitations(invitationsData || []);
       }
 
-      // Add registrations to teams
-      const teamsWithRegistrations = teamsData?.map(team => ({
-        ...team,
-        registrations: registrationsData.filter(reg => reg.team_id === team.id)
-      })) || [];
-
-      console.log('Teams with registrations:', teamsWithRegistrations); // Debug log
-
-      // Fetch pending invitations for this user
-      const { data: invitationsData, error: invitationsError } = await supabase
-        .from('team_invitations')
-        .select(`
-          *,
-          team:teams(name, created_by)
-        `)
-        .eq('email', profile.email)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
-
-      if (invitationsError) throw invitationsError;
-
-      setTeams(teamsWithRegistrations);
-      setInvitations(invitationsData || []);
     } catch (error) {
       console.error('Error fetching teams:', error);
     } finally {
@@ -122,6 +182,7 @@ useEffect(() => {
 
   fetchTeamsAndInvitations();
 }, [profile]);
+
 
   const handleInvitationResponse = async (invitationId: string, teamId: string, accept: boolean) => {
     setProcessingInvitation(invitationId);
@@ -362,6 +423,7 @@ useEffect(() => {
                           </div>
                         </div>
                       )}
+
 
                     <div className="pt-2 space-y-2">
                       <Link to={`/join-league/${team.id}`}>

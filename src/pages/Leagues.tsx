@@ -30,34 +30,64 @@ const Leagues = () => {
 
   useEffect(() => {
     const fetchLeagues = async () => {
-      if (!profile) return;
+        if (!profile) return;
 
-      try {
-        // Fetch all available leagues
-        const { data: allLeagues, error: leaguesError } = await supabase
-          .from('leagues')
-          .select('*')
-          .order('created_at', { ascending: false });
+        try {
+          // Get all leagues first
+          const { data: allLeagues, error: leaguesError } = await supabase
+            .from('leagues')
+            .select('*')
+            .order('created_at', { ascending: false });
 
-        if (leaguesError) throw leaguesError;
+          if (leaguesError) throw leaguesError;
 
-        // Fetch leagues created by the user (for "My Leagues" section)
-        const { data: userLeagues, error: userLeaguesError } = await supabase
-          .from('leagues')
-          .select('*')
-          .eq('created_by', profile.id)
-          .order('created_at', { ascending: false });
+          let myLeagues = [];
+          let availableLeagues = [];
 
-        if (userLeaguesError) throw userLeaguesError;
+          if (profile.role === 'league_admin') {
+            // For League Admins: My Leagues = leagues they created
+            myLeagues = allLeagues?.filter(league => league.created_by === profile.id) || [];
+            // Available Leagues = leagues created by other admins
+            availableLeagues = allLeagues?.filter(league => league.created_by !== profile.id) || [];
+            
+          } else {
+            // For Players: My Leagues = leagues their teams are registered for
+            const { data: userTeams, error: teamsError } = await supabase
+              .from('teams')
+              .select('id')
+              .or(`player1_id.eq.${profile.id},player2_id.eq.${profile.id}`);
 
-        setAvailableLeagues(allLeagues || []);
-        setMyLeagues(userLeagues || []);
-      } catch (error) {
-        console.error('Error fetching leagues:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+            if (teamsError) throw teamsError;
+
+            const teamIds = userTeams?.map(team => team.id) || [];
+
+            const { data: registrations, error: regError } = await supabase
+              .from('league_registrations')
+              .select('league_id')
+              .in('team_id', teamIds);
+
+            if (regError) throw regError;
+
+            const registeredLeagueIds = registrations?.map(reg => reg.league_id) || [];
+            
+            myLeagues = allLeagues?.filter(league => 
+              registeredLeagueIds.includes(league.id)
+            ) || [];
+            
+            availableLeagues = allLeagues?.filter(league => 
+              !registeredLeagueIds.includes(league.id)
+            ) || [];
+          }
+
+          setMyLeagues(myLeagues);
+          setAvailableLeagues(availableLeagues);
+          
+        } catch (error) {
+          console.error('Error fetching leagues:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
 
     fetchLeagues();
   }, [profile]);
