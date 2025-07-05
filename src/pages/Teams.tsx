@@ -3,11 +3,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Users, Plus, Trophy, Calendar, Mail } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
+import { Users, Plus, Trophy, Calendar, Mail, Clock, MapPin, CheckCircle, XCircle, MessageSquare } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 
 interface Team {
   id: string;
@@ -46,6 +47,14 @@ const Teams = () => {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [processingInvitation, setProcessingInvitation] = useState<string | null>(null);
+  const [matchConfirmations, setMatchConfirmations] = useState([]);
+  const [loadingConfirmations, setLoadingConfirmations] = useState(true);
+  const [processingConfirmation, setProcessingConfirmation] = useState<string | null>(null);
+  const [postponeForm, setPostponeForm] = useState({
+    matchId: '',
+    notes: '',
+    showForm: false
+  });
 
 useEffect(() => {
   const fetchTeamsAndInvitations = async () => {
@@ -76,6 +85,8 @@ useEffect(() => {
                 name,
                 player1_id,
                 player2_id,
+                created_by,
+                created_at,
                 player1:profiles!teams_player1_id_fkey(full_name, email),
                 player2:profiles!teams_player2_id_fkey(full_name, email)
               ),
@@ -90,6 +101,8 @@ useEffect(() => {
           // Transform the data to match the existing team structure
           const teamsWithRegistrations = registrationsData?.map(reg => ({
             ...reg.team,
+            created_by: reg.team.created_by,
+            created_at: reg.team.created_at,
             registrations: [{
               id: reg.id,
               league: reg.league,
@@ -182,6 +195,59 @@ useEffect(() => {
 
   fetchTeamsAndInvitations();
 }, [profile]);
+
+    useEffect(() => {
+      const fetchMatchConfirmations = async () => {
+        if (!profile) return;
+
+        try {
+          setLoadingConfirmations(true);
+          
+          // Get all teams where user is a member
+          const userTeamIds = teams.map(team => team.id);
+          
+          if (userTeamIds.length === 0) {
+            setMatchConfirmations([]);
+            return;
+          }
+
+          // Fetch match confirmations for user's teams
+          const { data, error } = await (supabase as any)
+            .from('match_confirmations')
+            .select(`
+              *,
+              match:matches(
+                id,
+                scheduled_date,
+                scheduled_time,
+                venue,
+                team1:teams!matches_team1_id_fkey(id, name),
+                team2:teams!matches_team2_id_fkey(id, name),
+                league:leagues(name),
+                division:divisions(name)
+              )
+            `);
+          
+          const filteredData = data
+            ? data.filter((item: any) =>
+                userTeamIds.includes(item.team_id) && item.status === 'pending'
+              )
+            : [];
+
+          if (error) throw error;
+          setMatchConfirmations(filteredData);
+          
+        } catch (error) {
+          console.error('Error fetching match confirmations:', error);
+        } finally {
+          setLoadingConfirmations(false);
+        }
+      };
+
+      if (teams.length > 0) {
+        fetchMatchConfirmations();
+      }
+    }, [teams, profile]);
 
 
   const handleInvitationResponse = async (invitationId: string, teamId: string, accept: boolean) => {
@@ -284,6 +350,50 @@ useEffect(() => {
       </div>
     );
   }
+
+  const handleConfirmationResponse = async (confirmationId: string, response: 'accepted' | 'postpone_requested', notes?: string) => {
+      setProcessingConfirmation(confirmationId);
+      
+      try {
+        const updateData: any = {
+          status: response,
+          responded_at: new Date().toISOString()
+        };
+        
+        if (notes) {
+          updateData.response_notes = notes;
+        }
+
+        const { data, error } = await (supabase as any)
+          .from('match_confirmations')
+          .update(updateData)
+          .eq('id', confirmationId);
+
+        if (error) throw error;
+
+        // Remove from pending confirmations
+        setMatchConfirmations(prev => 
+          prev.filter(conf => conf.id !== confirmationId)
+        );
+
+        setMessage(
+          response === 'accepted' 
+            ? 'Match time accepted! You\'re all set to play.' 
+            : 'Postponement request sent to league administrator.'
+        );
+
+        // Reset postpone form
+        setPostponeForm({ matchId: '', notes: '', showForm: false });
+
+        setTimeout(() => setMessage(null), 5000);
+
+      } catch (error) {
+        console.error('Error responding to confirmation:', error);
+        setMessage('Error processing response. Please try again.');
+      } finally {
+        setProcessingConfirmation(null);
+      }
+    };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
@@ -494,6 +604,25 @@ useEffect(() => {
           </div>
         )}
       </div>
+      {/* Add this section before the final closing </div> in the main content area */}
+
+        {/* Match Confirmations Section */}
+        {matchConfirmations.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-blue-500" />
+                Pending Match Confirmations ({matchConfirmations.length})
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Please confirm or request changes for these scheduled matches
+              </p>
+            </CardHeader>
+            <CardContent>
+              {/* Copy the rest of the JSX from the artifact above */}
+            </CardContent>
+          </Card>
+        )}
     </div>
   );
 };
