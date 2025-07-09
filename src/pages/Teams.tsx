@@ -205,6 +205,10 @@ useEffect(() => {
           
           // Get all teams where user is a member
           const userTeamIds = teams.map(team => team.id);
+
+          // DEBUG: Log the teams
+          console.log('Teams page - Teams state:', teams);
+          console.log('Teams page - User team IDs:', userTeamIds);
           
           if (userTeamIds.length === 0) {
             setMatchConfirmations([]);
@@ -356,7 +360,7 @@ useEffect(() => {
       
       try {
         const updateData: any = {
-          status: response,
+          status: response, 
           responded_at: new Date().toISOString()
         };
         

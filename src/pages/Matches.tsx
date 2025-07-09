@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import ScoreRecordingModal from '@/components/ScoreRecordingModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Match } from '@/types/match';
 
 interface MatchConfirmation {
   id: string;
@@ -29,20 +30,20 @@ interface MatchConfirmation {
   };
 }
 
-interface Match {
-  id: string;
-  scheduled_date: string;
-  scheduled_time: string | null;
-  venue: string | null;
-  status: string;
-  team1_score: number | null;
-  team2_score: number | null;
-  winner_team_id: string | null;
-  team1: { name: string };
-  team2: { name: string };
-  league: { name: string };
-  division: { name: string };
-}
+//interface Match {
+  //id: string;
+  //scheduled_date: string;
+  //scheduled_time: string | null;
+  //venue: string | null;
+  //status: string;
+  //team1_score: number | null;
+  //team2_score: number | null;
+  //winner_team_id: string | null;
+  //team1: { name: string };
+  //team2: { name: string };
+  //league: { name: string };
+  //division: { name: string };
+//}
 
 const Matches = () => {
   const { profile } = useAuth();
@@ -63,55 +64,57 @@ const Matches = () => {
     }
   }, [profile]);
 
-  const fetchMatches = async () => {
-    if (!profile) return;
+    const fetchMatches = async () => {
+      if (!profile) return;
 
-    try {
-      // Get teams where user is a player
-      const { data: userTeams, error: teamsError } = await supabase
-        .from('teams')
-        .select('id')
-        .or(`player1_id.eq.${profile.id},player2_id.eq.${profile.id}`);
+      try {
+        // Get teams where user is a player
+        const { data: userTeams, error: teamsError } = await supabase
+          .from('teams')
+          .select('id')
+          .or(`player1_id.eq.${profile.id},player2_id.eq.${profile.id}`);
 
-      if (teamsError) throw teamsError;
-      const teamIds = userTeams?.map(t => t.id) || [];
+        if (teamsError) throw teamsError;
+        const teamIds = userTeams?.map(t => t.id) || [];
 
-      if (teamIds.length === 0) {
-        setLoading(false);
-        return;
-      }
+        console.log('Team IDs:', teamIds);
 
-      // Temporary workaround for TypeScript
-      const supabaseAny = supabase as any;
-      
-      // Get pending confirmations
-      const { data: confirmations, error: confirmError } = await supabaseAny
-        .from('match_confirmations')
-        .select(`
+        if (teamIds.length === 0) {
+          setLoading(false);
+          return;
+        }
+
+        // Get pending confirmations
+        const supabaseAny = supabase as any;
+        const { data: confirmations, error: confirmError } = await supabaseAny
+          .from('match_confirmations')
+          .select(`
+            id,
+            match_id,
+            team_id,
+            status,
+            match:matches (
+              scheduled_date,
+              scheduled_time,
+              venue,
+              team1:teams!matches_team1_id_fkey(name),
+              team2:teams!matches_team2_id_fkey(name),
+              league:leagues(name),
+              division:divisions(name)
+            )
+          `)
+          .in('team_id', teamIds)
+          .eq('status', 'pending');
+
+        if (confirmError) throw confirmError;
+
+        // Clean select fields without any comments
+        const selectFields = `
           id,
-          match_id,
-          team_id,
-          status,
-          match:matches (
-            scheduled_date,
-            scheduled_time,
-            venue,
-            team1:teams!matches_team1_id_fkey(name),
-            team2:teams!matches_team2_id_fkey(name),
-            league:leagues(name),
-            division:divisions(name)
-          )
-        `)
-        .in('team_id', teamIds)
-        .eq('status', 'pending');
-
-      if (confirmError) throw confirmError;
-
-      // Get all matches for user's teams
-      const { data: matches, error: matchesError } = await supabase
-        .from('matches')
-        .select(`
-          id,
+          league_id,
+          division_id,
+          team1_id,
+          team2_id,
           scheduled_date,
           scheduled_time,
           venue,
@@ -119,35 +122,55 @@ const Matches = () => {
           team1_score,
           team2_score,
           winner_team_id,
+          match_duration,
+          created_at,
+          updated_at,
+          round_number,
+          match_number,
+          created_by,
           team1:teams!matches_team1_id_fkey(name),
           team2:teams!matches_team2_id_fkey(name),
           league:leagues(name),
           division:divisions(name)
-        `)
-        .or(`team1_id.in.(${teamIds.join(',')}),team2_id.in.(${teamIds.join(',')})`)
-        .order('scheduled_date', { ascending: false });
+        `;
 
-      if (matchesError) throw matchesError;
+        const [result1, result2] = await Promise.all([
+          supabase.from('matches').select(selectFields).in('team1_id', teamIds),
+          supabase.from('matches').select(selectFields).in('team2_id', teamIds)
+        ]);
 
-      // Categorize matches
-      const allMatchesData = matches || [];
-      const upcoming = allMatchesData.filter(match => 
-        match.status === 'confirmed' && !match.team1_score && !match.team2_score
-      );
-      const completed = allMatchesData.filter(match => 
-        match.status === 'completed' || match.team1_score !== null || match.team2_score !== null
-      );
+        if (result1.error) throw result1.error;
+        if (result2.error) throw result2.error;
 
-      setPendingConfirmations(confirmations || []);
-      setUpcomingMatches(upcoming);
-      setCompletedMatches(completed);
-      setAllMatches(allMatchesData);
-    } catch (error) {
-      console.error('Error fetching matches:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+        // Combine and deduplicate matches
+        const allMatchesData = [...(result1.data || []), ...(result2.data || [])];
+        const uniqueMatches = allMatchesData.filter((match, index, self) => 
+          index === self.findIndex(m => m.id === match.id)
+        );
+
+        // Sort by scheduled date
+        uniqueMatches.sort((a, b) => new Date(b.scheduled_date || 0).getTime() - new Date(a.scheduled_date || 0).getTime());
+
+        const upcoming = uniqueMatches.filter(match => 
+          match.status === 'confirmed' && !match.team1_score && !match.team2_score
+        );
+        const completed = uniqueMatches.filter(match => 
+          match.status === 'completed' || match.team1_score !== null || match.team2_score !== null
+        );
+
+        console.log('Confirmations:', confirmations);
+        console.log('All matches:', uniqueMatches);
+
+        setPendingConfirmations(confirmations || []);
+        setUpcomingMatches(upcoming);
+        setCompletedMatches(completed);
+        setAllMatches(uniqueMatches);
+      } catch (error) {
+        console.error('Error fetching matches:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
   const handleConfirmMatch = async (confirmationId: string) => {
     setProcessing(confirmationId);

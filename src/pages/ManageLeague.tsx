@@ -31,7 +31,7 @@ import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import { generateRoundRobinMatches, clearAllMatches } from '@/utils/matchGenerator';
 import ScoreRecordingModal from '@/components/ScoreRecordingModal';
-
+import { Match } from '@/types/match';
 
 
 interface League {
@@ -87,32 +87,32 @@ interface Division {
   created_at: string;
 }
 
-interface Match {
-  id: string;
-  league_id: string;
-  division_id: string;
-  team1_id: string;
-  team2_id: string;
-  round_number: number;
-  match_number: number;
-  scheduled_date: string | null;
-  scheduled_time: string | null;
-  venue: string | null;
-  status: string;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-  team1?: {
-    name: string;
-  };
-  team2?: {
-    name: string;
-  };
-    division?: {
-      name: string;
-      level: number;
-    };
-  }
+// interface Match {
+//   id: string;
+//   league_id: string;
+//   division_id: string;
+//   team1_id: string;
+//   team2_id: string;
+//   round_number: number;
+//   match_number: number;
+//   scheduled_date: string | null;
+//   scheduled_time: string | null;
+//   venue: string | null;
+//   status: string;
+//   created_by: string | null;
+//   created_at: string;
+//   updated_at: string;
+//   team1?: {
+//   name: string;
+//   };
+//   team2?: {
+//     name: string;
+//   };
+//     division?: {
+//       name: string;
+//       level: number;
+//     };
+ // }
 
 interface MatchConfirmation {
   id?: string;
@@ -154,12 +154,13 @@ const ManageLeague = () => {
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [fixtures, setFixtures] = useState<Match[]>([]);
   const [isClearingMatches, setIsClearingMatches] = useState(false);
-  const [scheduleForm, setScheduleForm] = useState({
+  const [showRescheduleForm, setShowRescheduleForm] = useState(false);
+  const [rescheduleForm, setRescheduleForm] = useState({
     matchId: '',
     date: '',
     time: '',
     venue: ''
-  });
+});
   const [scoreModalOpen, setScoreModalOpen] = useState(false);
   const [selectedMatchForScoring, setSelectedMatchForScoring] = useState<any>(null);
   
@@ -173,6 +174,13 @@ const ManageLeague = () => {
     venue: '',
     max_teams: '',
     registration_deadline: ''
+  });
+  const [processing, setProcessing] = useState<string | null>(null);
+  const [scheduleForm, setScheduleForm] = useState({
+    matchId: '',
+    date: '',
+    time: '',
+    venue: ''
   });
 
   useEffect(() => {
@@ -274,6 +282,30 @@ useEffect(() => {
     }
   };
 
+  const handleConfirmMatch = async (confirmationId: string) => {
+    setProcessing(confirmationId);
+    
+    try {
+      const { error } = await supabase
+        .from('match_confirmations' as any)
+        .update({ status: 'confirmed' })
+        .eq('id', confirmationId);
+
+      if (error) throw error;
+
+      setSuccess('Match confirmed successfully!');
+      await fetchAdminMatches(); // Refresh data
+
+      setTimeout(() => setSuccess(null), 3000);
+
+    } catch (error) {
+      console.error('Error confirming match:', error);
+      setError('Failed to confirm match. Please try again.');
+    } finally {
+      setProcessing(null);
+    }
+  };
+
   const fetchRegisteredTeams = async () => {
   if (!leagueId) return;
 
@@ -303,48 +335,81 @@ useEffect(() => {
     };
 
   const fetchFixtures = async () => {
-    if (!leagueId) return;
+  if (!leagueId) return;
 
+  try {
+    const { data, error } = await supabase
+      .from('matches')
+      .select(`
+        id,
+        league_id,
+        division_id,
+        team1_id,
+        team2_id,
+        scheduled_date,
+        scheduled_time,
+        venue,
+        status,
+        team1_score,
+        team2_score,
+        winner_team_id,
+        match_duration,
+        created_at,
+        updated_at,
+        round_number,
+        match_number,
+        created_by,
+        team1:teams!matches_team1_id_fkey(name),
+        team2:teams!matches_team2_id_fkey(name),
+        division:divisions(name, level)
+      `)
+      .eq('league_id', leagueId)
+      .order('match_number');
+
+    if (error) throw error;
+    setFixtures(data || []);
+  } catch (error) {
+    console.error('Error fetching fixtures:', error);
+  }
+};
+
+  const createMatchConfirmationsForAllMatches = async (leagueId: string) => {
     try {
-      const { data, error } = await supabase
+      // Get all newly created matches for this league
+      const { data: matches, error: matchesError } = await supabase
         .from('matches')
-        .select(`
-          *,
-          team1:teams!matches_team1_id_fkey(name),
-          team2:teams!matches_team2_id_fkey(name),
-          division:divisions(name, level)
-        `)
+        .select('id, team1_id, team2_id')
         .eq('league_id', leagueId)
-        .order('match_number');
+        .eq('status', 'scheduled'); // Only for new matches
 
-      if (error) throw error;
-      setFixtures(
-        (data || []).map((item: any) => ({
-          id: item.id,
-          league_id: item.league_id,
-          division_id: item.division_id,
-          team1_id: item.team1_id,
-          team2_id: item.team2_id,
-          round_number: item.round_number ?? 0,
-          match_number: item.match_number ?? 0,
-          scheduled_date: item.scheduled_date ?? null,
-          scheduled_time: item.scheduled_time ?? null,
-          venue: item.venue ?? null,
-          status: item.status,
-          created_by: item.created_by ?? null,
-          created_at: item.created_at,
-          updated_at: item.updated_at,
-          team1: item.team1,
-          team2: item.team2,
-          division: item.division,
-        }))
-      );
+      if (matchesError) throw matchesError;
+
+      // Create confirmations for all matches
+      const confirmations = [];
+      for (const match of matches || []) {
+        confirmations.push(
+          { match_id: match.id, team_id: match.team1_id, status: 'pending' },
+          { match_id: match.id, team_id: match.team2_id, status: 'pending' }
+        );
+      }
+
+      if (confirmations.length > 0) {
+        const supabaseAny = supabase as any; // Type workaround
+        const { error: confirmError } = await supabaseAny
+          .from('match_confirmations')
+          .upsert(confirmations);
+
+        if (confirmError) throw confirmError;
+        console.log(`Created ${confirmations.length} match confirmations`);
+      }
+      
     } catch (error) {
-      console.error('Error fetching fixtures:', error);
+      console.error('Error creating match confirmations:', error);
+      // Don't throw - fixture generation should still succeed even if confirmations fail
     }
   };
 
-  const handleGenerateFixtures = async () => {
+    const handleGenerateFixtures = async () => {
     if (!leagueId) return;
     
     setIsGeneratingFixtures(true);
@@ -352,8 +417,11 @@ useEffect(() => {
       const result = await generateRoundRobinMatches(leagueId);
       
       if (result.success) {
+        // Create match confirmations for all new matches
+        await createMatchConfirmationsForAllMatches(leagueId);
+        
         await fetchFixtures(); // Refresh the fixtures
-        setRegistrationMessage(`Generated ${result.matchesGenerated} fixtures across ${result.divisions} divisions`);
+        setRegistrationMessage(`Generated ${result.matchesGenerated} fixtures with confirmations across ${result.divisions} divisions`);
       } else {
         setRegistrationMessage(result.error || 'Failed to generate fixtures');
       }
@@ -473,7 +541,7 @@ useEffect(() => {
     }
   };
 
-  // Add this function to handle match scheduling
+
   const handleScheduleMatch = async (matchId: string) => {
     if (!scheduleForm.date || !scheduleForm.time) {
       setError('Please provide both date and time for the match.');
@@ -499,6 +567,8 @@ useEffect(() => {
       
       // Refresh fixtures
       await fetchFixtures();
+
+      await fetchAdminMatches(); // Refresh admin matches
       
       //Create match confirmations for both teams
       const match = fixtures.find(f => f.id === matchId);
@@ -554,59 +624,98 @@ useEffect(() => {
     }
   };
 
-  const handleClearMatches = async () => {
-      if (!leagueId) return;
-      
-      const confirmed = window.confirm('Are you sure you want to delete ALL matches? This cannot be undone.');
-      if (!confirmed) return;
-      
-      setIsClearingMatches(true);
-      try {
-        const result = await clearAllMatches(leagueId);
-        
-        if (result.success) {
-          await fetchFixtures(); // Refresh the fixtures
-          setRegistrationMessage('All matches cleared successfully');
-        } else {
-          setRegistrationMessage(result.error || 'Failed to clear matches');
-        }
-      } catch (error) {
-        setRegistrationMessage('Error clearing matches');
-      } finally {
-        setIsClearingMatches(false);
-      }
-    };
-
-  const fetchAdminMatches = async () => {
+   const handleClearMatches = async () => {
     if (!leagueId) return;
     
+    const confirmed = window.confirm('Are you sure you want to delete ALL matches? This cannot be undone.');
+    if (!confirmed) return;
+    
+    setIsClearingMatches(true);
+    
     try {
-      // Get all matches for this league
+      // Step 1: Get all match IDs for this league
       const { data: matches, error: matchesError } = await supabase
         .from('matches')
-        .select(`
-          id,
-          scheduled_date,
-          scheduled_time,
-          venue,
-          status,
-          team1_score,
-          team2_score,
-          winner_team_id,
-          team1_id,
-          team2_id,
-          team1:teams!matches_team1_id_fkey(name),
-          team2:teams!matches_team2_id_fkey(name),
-          division:divisions(name),
-          league:leagues(name)
-        `)
-        .eq('league_id', leagueId)
-        .order('scheduled_date', { ascending: true });
+        .select('id')
+        .eq('league_id', leagueId);
 
-      if (matchesError) throw matchesError;
-    
-    // Rest of your function stays the same...
-      // Get pending confirmations for this league
+      if (matchesError) {
+        throw new Error(`Failed to fetch matches: ${matchesError.message}`);
+      }
+
+      // Step 2: Delete match confirmations first (to avoid foreign key constraint)
+      if (matches && matches.length > 0) {
+        const matchIds = matches.map(m => m.id);
+        
+        const { error: confirmError } = await supabase
+          .from('match_confirmations' as any)
+          .delete()
+          .in('match_id', matchIds);
+
+        if (confirmError) {
+          console.warn('Warning deleting confirmations:', confirmError.message);
+          // Don't throw - continue to delete matches even if confirmations fail
+        }
+      }
+
+      // Step 3: Delete all matches for this league
+      const { error: matchDeleteError } = await supabase
+        .from('matches')
+        .delete()
+        .eq('league_id', leagueId);
+
+      if (matchDeleteError) {
+        throw new Error(`Failed to delete matches: ${matchDeleteError.message}`);
+      }
+
+      // Step 4: Refresh data and show success
+      await fetchFixtures();
+      await fetchAdminMatches(); // Also refresh admin matches
+      setRegistrationMessage(`Successfully cleared ${matches?.length || 0} matches and their confirmations`);
+      
+    } catch (error) {
+      console.error('Error clearing matches:', error);
+      setRegistrationMessage(`Error clearing matches: ${(error as Error).message}`);
+    } finally {
+      setIsClearingMatches(false);
+    }  };
+
+  const fetchAdminMatches = async () => {
+  if (!leagueId) return;
+  
+  try {
+    const { data: matches, error: matchesError } = await supabase
+      .from('matches')
+      .select(`
+        id,
+        league_id,
+        division_id,
+        team1_id,
+        team2_id,
+        scheduled_date,
+        scheduled_time,
+        venue,
+        status,
+        team1_score,
+        team2_score,
+        winner_team_id,
+        match_duration,
+        created_at,
+        updated_at,
+        round_number,
+        match_number,
+        created_by,
+        team1:teams!matches_team1_id_fkey(name),
+        team2:teams!matches_team2_id_fkey(name),
+        division:divisions(name),
+        league:leagues(name)
+      `)
+      .eq('league_id', leagueId)
+      .order('scheduled_date', { ascending: true });
+
+    if (matchesError) throw matchesError;
+      // Fetch match confirmations
+      // Use 'as any' to bypass type issues with Supabase client
       const supabaseAny = supabase as any;
       const { data: confirmations, error: confirmError } = await supabaseAny
         .from('match_confirmations')
@@ -1224,7 +1333,7 @@ useEffect(() => {
                                       {confirmation.match.team1.name} vs {confirmation.match.team2.name}
                                     </h4>
                                     <p className="text-sm text-muted-foreground">
-                                      {confirmation.match.league.name} • {confirmation.match.division.name}
+                                      {confirmation.match.league?.name} • {confirmation.match.division?.name || 'Unknown Division'}
                                     </p>
                                   </div>
                                   <Badge className="bg-yellow-100 text-yellow-800 text-xs whitespace-nowrap">
@@ -1266,7 +1375,12 @@ useEffect(() => {
                                     variant="outline"
                                     onClick={() => {
                                       setShowRescheduleForm(confirmation.id);
-                                      setRescheduleForm({ confirmationId: confirmation.id, reason: '' });
+                                      setRescheduleForm({ 
+                                        matchId: confirmation.match_id, 
+                                        date: confirmation.match.scheduled_date || '', 
+                                        time: confirmation.match.scheduled_time || '',
+                                        venue: confirmation.match.venue || ''
+                                      });
                                     }}
                                     disabled={processing === confirmation.id}
                                     className="w-full sm:flex-1"
@@ -1463,6 +1577,61 @@ useEffect(() => {
                                   )}
                                 </div>
                               </div>
+                              {/* Add this right after your existing buttons */}
+                                {schedulingMatch === match.id && (
+                                  <div className="mt-4 p-4 border border-blue-200 rounded-lg bg-blue-50">
+                                    <h4 className="font-semibold mb-3">Schedule Match</h4>
+                                    <div className="grid gap-3">
+                                      <div>
+                                        <Label htmlFor="match-date">Date *</Label>
+                                        <Input
+                                          id="match-date"
+                                          type="date"
+                                          value={scheduleForm.date}
+                                          onChange={(e) => setScheduleForm(prev => ({...prev, date: e.target.value}))}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label htmlFor="match-time">Time *</Label>
+                                        <Input
+                                          id="match-time"
+                                          type="time"
+                                          value={scheduleForm.time}
+                                          onChange={(e) => setScheduleForm(prev => ({...prev, time: e.target.value}))}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label htmlFor="match-venue">Venue (Optional)</Label>
+                                        <Input
+                                          id="match-venue"
+                                          placeholder="Enter venue location"
+                                          value={scheduleForm.venue}
+                                          onChange={(e) => setScheduleForm(prev => ({...prev, venue: e.target.value}))}
+                                        />
+                                      </div>
+                                      <div className="flex gap-2 pt-2">
+                                        <Button 
+                                          size="sm"
+                                          onClick={() => handleScheduleMatch(match.id)}
+                                          disabled={!scheduleForm.date || !scheduleForm.time}
+                                        >
+                                          <Clock className="w-4 h-4 mr-2" />
+                                          Schedule Match
+                                        </Button>
+                                        <Button 
+                                          size="sm"
+                                          variant="outline" 
+                                          onClick={() => {
+                                            setSchedulingMatch(null);
+                                            setScheduleForm({ matchId: '', date: '', time: '', venue: '' });
+                                          }}
+                                        >
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                             </CardContent>
                           </Card>
                         ))}
