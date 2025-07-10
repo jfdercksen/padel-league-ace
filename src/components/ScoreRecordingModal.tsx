@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Trophy, X, Save, MapPin, Clock, Calendar } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -34,6 +34,8 @@ interface SetScore {
   team1Games: string;
   team2Games: string;
 }
+
+
 
 const ScoreRecordingModal = ({ isOpen, onClose, match, onScoreRecorded }: ScoreRecordingModalProps) => {
   const [sets, setSets] = useState<SetScore[]>([
@@ -230,6 +232,9 @@ return (
             <Trophy className="w-5 h-5" />
             Record Match Result
             </DialogTitle>
+            <DialogDescription>
+              Enter the final scores for this match
+            </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 sm:space-y-6">

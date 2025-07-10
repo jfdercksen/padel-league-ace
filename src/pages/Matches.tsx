@@ -172,32 +172,35 @@ const Matches = () => {
       }
     };
 
-  const handleConfirmMatch = async (confirmationId: string) => {
-    setProcessing(confirmationId);
-    try {
-      const supabaseAny = supabase as any;
-      
-      const { data, error } = await supabaseAny
-        .from('match_confirmations')
-        .update({ 
-          status: 'confirmed',
-          responded_at: new Date().toISOString()
-        })
-        .eq('id', confirmationId)
-        .select();
+    const handleConfirmMatch = async (confirmationId: string) => {
+  console.log('🚀 Player confirming match confirmation:', confirmationId);
+  setProcessing(confirmationId);
+  
+  try {
+    const supabaseAny = supabase as any;
+    
+    const { error } = await supabaseAny
+      .from('match_confirmations')
+      .update({ 
+        status: 'confirmed',
+        responded_at: new Date().toISOString()
+      })
+      .eq('id', confirmationId);
 
-      if (error) throw error;
+    if (error) throw error;
+    console.log('✅ Player confirmation updated successfully');
 
-      // Remove from pending list and refresh data
-      setPendingConfirmations(prev => prev.filter(c => c.id !== confirmationId));
-      await fetchMatches(); // Refresh to update upcoming matches
-      
-    } catch (error) {
-      console.error('Error confirming match:', error);
-    } finally {
-      setProcessing(null);
-    }
-  };
+    setPendingConfirmations(prev => prev.filter(c => c.id !== confirmationId));
+    await fetchMatches();
+    
+    console.log('✅ Player confirmation completed - admin will handle match status updates');
+    
+  } catch (error) {
+    console.error('❌ Error confirming match:', error);
+  } finally {
+    setProcessing(null);
+  }
+};
 
   const handleRequestReschedule = async (confirmationId: string) => {
     if (!rescheduleForm.reason.trim()) {
@@ -230,6 +233,14 @@ const Matches = () => {
     } finally {
       setProcessing(null);
     }
+  };
+  // In Matches.tsx, add the debug function and call it in fetchMatches():
+  const debugUpcomingMatches = (allMatches: any[]) => {
+    console.log('=== DEBUG UPCOMING MATCHES ===');
+    allMatches.forEach((match, index) => {
+      const isUpcoming = match.status === 'confirmed' && !match.team1_score && !match.team2_score;
+      console.log(`${index + 1}. ${match.team1.name} vs ${match.team2.name} - Status: "${match.status}" - Upcoming: ${isUpcoming}`);
+    });
   };
 
   const renderMatchCard = (match: Match, showActions = false) => (
@@ -509,7 +520,7 @@ const Matches = () => {
                                 }}
                               >
                                 Cancel
-                              </Button>
+                              </Button>                              
                             </div>
                           </div>
                         ) : (
