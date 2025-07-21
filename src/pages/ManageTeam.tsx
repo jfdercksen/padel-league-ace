@@ -390,6 +390,14 @@ const ManageTeam = () => {
                           <Button 
                             variant="ghost" 
                             size="sm"
+                            onClick={() => setIsInviteDialogOpen(true)}
+                            title="Change teammate"
+                          >
+                            <UserPlus className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
                             className="text-destructive hover:bg-destructive/10"
                             onClick={() => {
                               if (window.confirm(`Are you sure you want to remove ${team.player2.full_name} from the team?`)) {
