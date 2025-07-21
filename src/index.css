@@ -16,16 +16,16 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 95 45% 20%; /* Padel court green */
+    --primary: 20 80% 48%; /* Burnt orange */
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 48 89% 60%; /* Tennis ball yellow */
+    --secondary: 30 90% 62%; /* Light orange */
     --secondary-foreground: 222.2 47.4% 11.2%;
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 95 35% 35%; /* Darker green accent */
+    --accent: 15 75% 40%; /* Darker orange accent */
     --accent-foreground: 210 40% 98%;
 
     --destructive: 0 84.2% 60.2%;
@@ -33,15 +33,15 @@
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 95 45% 20%;
+    --ring: 20 80% 48%;
 
     --radius: 0.75rem;
 
     /* Custom padel colors */
-    --padel-green: 95 45% 20%;
-    --padel-yellow: 48 89% 60%;
-    --padel-dark: 95 35% 15%;
-    --court-surface: 95 25% 85%;
+    --padel-orange: 20 80% 48%;
+    --padel-light-orange: 30 90% 62%;
+    --padel-dark-orange: 15 75% 40%;
+    --court-surface: 30 25% 90%;
   }
 
   .dark {
@@ -88,11 +88,11 @@
 
 @layer utilities {
   .gradient-padel {
-    background: linear-gradient(135deg, hsl(var(--padel-green)) 0%, hsl(var(--padel-dark)) 100%);
+    background: linear-gradient(135deg, hsl(var(--padel-orange)) 0%, hsl(var(--padel-dark-orange)) 100%);
   }
   
   .gradient-court {
-    background: linear-gradient(45deg, hsl(var(--court-surface)) 0%, hsl(var(--padel-yellow) / 0.1) 100%);
+    background: linear-gradient(45deg, hsl(var(--court-surface)) 0%, hsl(var(--padel-light-orange) / 0.1) 100%);
   }
   /* Add these responsive improvements to your global CSS */
 

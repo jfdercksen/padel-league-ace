@@ -1,0 +1,31 @@
+<svg width="800" height="600" viewBox="0 0 800 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background court -->
+  <rect width="800" height="600" fill="#E5E7EB" />
+  
+  <!-- Court outline -->
+  <rect x="100" y="100" width="600" height="400" fill="#8ECAE6" stroke="#023047" stroke-width="4" />
+  
+  <!-- Court lines -->
+  <line x1="400" y1="100" x2="400" y2="500" stroke="#023047" stroke-width="2" />
+  <line x1="100" y1="300" x2="700" y2="300" stroke="#023047" stroke-width="2" />
+  <circle cx="400" cy="300" r="50" stroke="#023047" stroke-width="2" fill="none" />
+  
+  <!-- Padel rackets -->
+  <g transform="translate(250, 200) rotate(-15)">
+    <ellipse cx="0" cy="0" rx="60" ry="80" fill="#FB8500" stroke="#023047" stroke-width="3" />
+    <ellipse cx="0" cy="0" rx="50" ry="70" fill="none" stroke="#023047" stroke-width="1" stroke-dasharray="4 2" />
+    <rect x="-10" y="80" width="20" height="100" fill="#023047" />
+    <rect x="-20" y="180" width="40" height="15" rx="5" fill="#023047" />
+  </g>
+  
+  <g transform="translate(550, 200) rotate(15)">
+    <ellipse cx="0" cy="0" rx="60" ry="80" fill="#FB8500" stroke="#023047" stroke-width="3" />
+    <ellipse cx="0" cy="0" rx="50" ry="70" fill="none" stroke="#023047" stroke-width="1" stroke-dasharray="4 2" />
+    <rect x="-10" y="80" width="20" height="100" fill="#023047" />
+    <rect x="-20" y="180" width="40" height="15" rx="5" fill="#023047" />
+  </g>
+  
+  <!-- Ball -->
+  <circle cx="400" cy="350" r="20" fill="#FFB703" stroke="#023047" stroke-width="2" />
+  <path d="M390 340 Q400 330 410 340 Q420 350 410 360 Q400 370 390 360 Q380 350 390 340" fill="#023047" fill-opacity="0.2" />
+</svg>
