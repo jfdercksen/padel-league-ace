@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Users, CheckCircle, XCircle, Mail, Calendar, Shield, Trophy, Pencil, Eye, AlertCircle } from 'lucide-react';
+import { Users, CheckCircle, XCircle, Mail, Calendar, Shield, Trophy, Pencil, Eye, AlertCircle, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
