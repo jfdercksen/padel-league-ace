@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Trophy, Users, Calendar, Settings, Pencil, Trash2, UserPlus, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Trophy, Users, Calendar, Settings, Pencil, Trash2, UserPlus, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
@@ -643,6 +643,12 @@ interface Team {
     id: string;
     name: string;
   };
+  registrations?: {
+    id: string;
+    status: string;
+    team_id: string;
+    division_id: string;
+  }[];
 }
 
 interface Division {
@@ -783,8 +789,10 @@ const ManageLeague = () => {
       const { data: registrations, error: regError } = await supabase
         .from('league_registrations')
         .select(`
+          id,
           team_id,
           division_id,
+          status,
           team:teams (
             id,
             name,
@@ -803,7 +811,13 @@ const ManageLeague = () => {
         name: reg.team.name,
         player1: reg.team.player1,
         player2: reg.team.player2,
-        division: reg.division
+        division: reg.division,
+        registrations: [{
+          id: reg.id,
+          status: reg.status,
+          team_id: reg.team_id,
+          division_id: reg.division_id
+        }]
       })) || [];
 
       setTeams(transformedTeams);
@@ -1605,49 +1619,113 @@ const ManageLeague = () => {
                           <TableHead>Team Name</TableHead>
                           <TableHead>Players</TableHead>
                           <TableHead>Division</TableHead>
+                          <TableHead>Status</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {teams.map((team) => (
-                          <TableRow key={team.id}>
-                            <TableCell className="font-medium">{team.name}</TableCell>
-                            <TableCell>
-                              <div className="space-y-1">
-                                <div>{team.player1.full_name}</div>
-                                {team.player2 && <div>{team.player2.full_name}</div>}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {team.division ? (
-                                <Badge variant="outline">{team.division.name}</Badge>
-                              ) : (
-                                <span className="text-muted-foreground text-sm">Not assigned</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleEditClick(team)}
-                                >
-                                  <Pencil className="w-4 h-4" />
-                                  <span className="sr-only">Edit</span>
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-destructive hover:bg-destructive/10"
-                                  onClick={() => handleDeleteClick(team)}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                  <span className="sr-only">Delete</span>
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {teams.map((team) => {
+                          // Get registration status from team data
+                          const registration = team.registrations && team.registrations[0];
+                          const status = registration ? registration.status : 'approved';
+                          const isPending = status === 'pending';
+
+                          return (
+                            <TableRow key={team.id} className={isPending ? "bg-yellow-50" : ""}>
+                              <TableCell className="font-medium">{team.name}</TableCell>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  <div>{team.player1.full_name}</div>
+                                  {team.player2 && <div>{team.player2.full_name}</div>}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {team.division ? (
+                                  <Badge variant="outline">{team.division.name}</Badge>
+                                ) : (
+                                  <span className="text-muted-foreground text-sm">Not assigned</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {isPending ? (
+                                  <Badge variant="secondary">Waiting for approval</Badge>
+                                ) : (
+                                  <Badge variant="default">Approved</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-2">
+                                  {isPending && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800"
+                                      onClick={async () => {
+                                        try {
+                                          // Update the registration status to approved
+                                          const { error } = await supabase
+                                            .from('league_registrations')
+                                            .update({ status: 'approved' })
+                                            .eq('team_id', team.id)
+                                            .eq('league_id', leagueId);
+
+                                          if (error) throw error;
+
+                                          // Update local state
+                                          setTeams(teams.map(t => {
+                                            if (t.id === team.id && t.registrations && t.registrations[0]) {
+                                              return {
+                                                ...t,
+                                                registrations: [{
+                                                  ...t.registrations[0],
+                                                  status: 'approved'
+                                                }]
+                                              };
+                                            }
+                                            return t;
+                                          }));
+
+                                          toast({
+                                            title: "Team Approved",
+                                            description: `${team.name} has been approved to join the league.`,
+                                            variant: "default"
+                                          });
+                                        } catch (error) {
+                                          console.error('Error approving team:', error);
+                                          toast({
+                                            title: "Error",
+                                            description: "Failed to approve team. Please try again.",
+                                            variant: "destructive"
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <CheckCircle className="w-4 h-4 mr-1" />
+                                      Approve
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleEditClick(team)}
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                    <span className="sr-only">Edit</span>
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteClick(team)}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                    <span className="sr-only">Delete</span>
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>

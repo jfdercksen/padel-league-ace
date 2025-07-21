@@ -210,12 +210,12 @@ const JoinLeague = () => {
           <Card className="max-w-2xl mx-auto">
             <CardContent className="flex flex-col items-center justify-center py-8 text-center">
               <Trophy className="w-16 h-16 text-green-500 mb-4" />
-              <h2 className="text-2xl font-bold text-green-600 mb-2">Registration Submitted!</h2>
+              <h2 className="text-2xl font-bold text-green-600 mb-2">Registration Request Submitted!</h2>
               <p className="text-muted-foreground mb-4">
-                Your team "{team?.name}" has been registered for the league.
+                Your team "{team?.name}" registration request has been sent to the league admin for approval.
               </p>
               <p className="text-sm text-muted-foreground">
-                The League Administrator will review your registration. Redirecting to teams...
+                You can check the status of your request on the Teams page. Redirecting to teams...
               </p>
             </CardContent>
           </Card>

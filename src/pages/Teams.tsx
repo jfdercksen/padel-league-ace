@@ -533,7 +533,7 @@ const Teams = () => {
                               <div>
                                 <p className="text-sm font-medium">{registration.league?.name}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {registration.division?.name} • {registration.status}
+                                  {registration.division?.name}
                                 </p>
                               </div>
                               <Badge
@@ -543,7 +543,7 @@ const Teams = () => {
                                 }
                                 className="text-xs"
                               >
-                                {registration.status}
+                                {registration.status === 'pending' ? 'Waiting for approval' : registration.status}
                               </Badge>
                             </div>
                           ))}
