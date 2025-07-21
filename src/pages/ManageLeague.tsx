@@ -1656,58 +1656,60 @@ const ManageLeague = () => {
                               <TableCell className="text-right">
                                 <div className="flex justify-end gap-2">
                                   {isPending && (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800"
-                                      onClick={async () => {
-                                        try {
-                                          // Update the registration status to approved
-                                          // First, get the registration ID
-                                          const registration = team.registrations && team.registrations[0];
-                                          if (!registration) {
-                                            throw new Error("Registration not found");
-                                          }
-                                          
-                                          const { error } = await supabase
-                                            .from('league_registrations')
-                                            .update({ status: 'approved' })
-                                            .eq('id', registration.id);
-
-                                          if (error) throw error;
-
-                                          // Update local state
-                                          setTeams(teams.map(t => {
-                                            if (t.id === team.id && t.registrations && t.registrations[0]) {
-                                              return {
-                                                ...t,
-                                                registrations: [{
-                                                  ...t.registrations[0],
-                                                  status: 'approved'
-                                                }]
-                                              };
+                                    <div className="flex gap-2">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800"
+                                        onClick={async () => {
+                                          try {
+                                            // Update the registration status to approved
+                                            // First, get the registration ID
+                                            const registration = team.registrations && team.registrations[0];
+                                            if (!registration) {
+                                              throw new Error("Registration not found");
                                             }
-                                            return t;
-                                          }));
 
-                                          toast({
-                                            title: "Team Approved",
-                                            description: `${team.name} has been approved to join the league.`,
-                                            variant: "default"
-                                          });
-                                        } catch (error) {
-                                          console.error('Error approving team:', error);
-                                          toast({
-                                            title: "Error",
-                                            description: "Failed to approve team. Please try again.",
-                                            variant: "destructive"
-                                          });
-                                        }
-                                      }}
-                                    >
-                                      <CheckCircle className="w-4 h-4 mr-1" />
-                                      Approve
-                                    </Button>
+                                            const { error } = await supabase
+                                              .from('league_registrations')
+                                              .update({ status: 'approved' })
+                                              .eq('id', registration.id);
+
+                                            if (error) throw error;
+
+                                            // Update local state
+                                            setTeams(teams.map(t => {
+                                              if (t.id === team.id && t.registrations && t.registrations[0]) {
+                                                return {
+                                                  ...t,
+                                                  registrations: [{
+                                                    ...t.registrations[0],
+                                                    status: 'approved'
+                                                  }]
+                                                };
+                                              }
+                                              return t;
+                                            }));
+
+                                            toast({
+                                              title: "Team Approved",
+                                              description: `${team.name} has been approved to join the league.`,
+                                              variant: "default"
+                                            });
+                                          } catch (error) {
+                                            console.error('Error approving team:', error);
+                                            toast({
+                                              title: "Error",
+                                              description: "Failed to approve team. Please try again.",
+                                              variant: "destructive"
+                                            });
+                                          }
+                                        }}
+                                      >
+                                        <CheckCircle className="w-4 h-4 mr-1" />
+                                        Approve
+                                      </Button>
+                                    </div>
                                   )}
                                   <Button
                                     variant="outline"
