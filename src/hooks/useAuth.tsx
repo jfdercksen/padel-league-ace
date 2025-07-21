@@ -1,9 +1,19 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { Database } from '@/integrations/supabase/types';
 
-type Profile = Database['public']['Tables']['profiles']['Row'];
+// Define Profile type directly instead of using Database types
+interface Profile {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  country: string | null;
+  role: 'super_admin' | 'league_admin' | 'player';
+  is_approved: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 interface AuthContextType {
   user: User | null;
@@ -130,6 +140,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    // Explicitly clear profile state
+    setProfile(null);
+    setUser(null);
   };
 
   const updateProfile = async (updates: Partial<Profile>) => {

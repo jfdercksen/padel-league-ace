@@ -1,38 +1,616 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  ArrowLeft, 
-  Calendar, 
-  MapPin, 
-  Users, 
-  Trophy, 
-  Settings,
-  Save,
-  X,
-  Trash2,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Mail,
-  User,
-  Plus
-} from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ArrowLeft, Trophy, Users, Calendar, Settings, Pencil, Trash2, UserPlus, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
-import { generateRoundRobinMatches, clearAllMatches } from '@/utils/matchGenerator';
-import ScoreRecordingModal from '@/components/ScoreRecordingModal';
-import { Match } from '@/types/match';
+import { useToast } from '@/components/ui/use-toast';
+import Leaderboard from '@/components/Leaderboard';
 
+// Helper functions for date formatting
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString('en-GB'); // dd/mm/yyyy format for display
+};
+
+// Format date for input fields (yyyy-MM-dd)
+const formatDateForInput = (dateString: string) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return date.toISOString().split('T')[0]; // yyyy-MM-dd format for input fields
+};
+
+// League Settings Form Component
+interface LeagueSettingsFormProps {
+  league: {
+    id: string;
+    name: string;
+    description: string | null;
+    start_date: string;
+    end_date: string;
+    status: string;
+    registration_deadline?: string;
+    max_teams_per_division?: number;
+    match_format?: string;
+    entry_fee?: number;
+    currency?: string;
+  };
+  leagueId: string | undefined;
+  onUpdate: () => void;
+}
+
+const LeagueSettingsForm = ({ league, leagueId, onUpdate }: LeagueSettingsFormProps) => {
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [divisions, setDivisions] = useState<Division[]>([]);
+  const [isLoadingDivisions, setIsLoadingDivisions] = useState(true);
+  const [isEditingDivision, setIsEditingDivision] = useState<string | null>(null);
+  const [newDivisionName, setNewDivisionName] = useState('');
+  const [editedDivisionName, setEditedDivisionName] = useState('');
+  const [isAddingDivision, setIsAddingDivision] = useState(false);
+  const [divisionToDelete, setDivisionToDelete] = useState<string | null>(null);
+  const [isDeleteDivisionDialogOpen, setIsDeleteDivisionDialogOpen] = useState(false);
+  const [teams, setTeams] = useState<Team[]>([]);
+
+  // Fetch divisions and teams when component mounts
+  useEffect(() => {
+    const fetchDivisionsAndTeams = async () => {
+      setIsLoadingDivisions(true);
+      try {
+        // Fetch divisions
+        const { data: divisionsData, error: divisionsError } = await supabase
+          .from('divisions')
+          .select('id, name, level')
+          .eq('league_id', leagueId)
+          .order('level');
+
+        if (divisionsError) throw divisionsError;
+        setDivisions(divisionsData || []);
+
+        // Fetch teams for checking division assignments
+        const { data: registrations, error: teamsError } = await supabase
+          .from('league_registrations')
+          .select(`
+            team_id,
+            division_id,
+            team:teams (
+              id,
+              name,
+              player1:profiles!teams_player1_id_fkey (id, full_name),
+              player2:profiles!teams_player2_id_fkey (id, full_name)
+            ),
+            division:divisions (id, name)
+          `)
+          .eq('league_id', leagueId);
+
+        if (teamsError) throw teamsError;
+
+        const transformedTeams = registrations?.map(reg => ({
+          id: reg.team.id,
+          name: reg.team.name,
+          player1: reg.team.player1,
+          player2: reg.team.player2,
+          division: reg.division
+        })) || [];
+
+        setTeams(transformedTeams);
+      } catch (error) {
+        console.error('Error fetching divisions or teams:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load divisions. Please try again.',
+          variant: 'destructive'
+        });
+      } finally {
+        setIsLoadingDivisions(false);
+      }
+    };
+
+    if (leagueId) {
+      fetchDivisionsAndTeams();
+    }
+  }, [leagueId, toast]);
+
+  // Function to refresh divisions after changes
+  const fetchDivisions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('divisions')
+        .select('id, name, level')
+        .eq('league_id', leagueId)
+        .order('level');
+
+      if (error) throw error;
+      setDivisions(data || []);
+    } catch (error) {
+      console.error('Error refreshing divisions:', error);
+    }
+  };
+
+  const [formData, setFormData] = useState({
+    name: league.name,
+    description: league.description || '',
+    start_date: formatDateForInput(league.start_date),
+    end_date: formatDateForInput(league.end_date),
+    status: league.status,
+    registration_deadline: formatDateForInput(league.registration_deadline || ''),
+    max_teams_per_division: league.max_teams_per_division || '',
+    match_format: league.match_format || '',
+    entry_fee: league.entry_fee || '',
+    currency: league.currency || 'ZAR'
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      // Create update object without the currency field
+      const updateData = {
+        name: formData.name,
+        description: formData.description || null,
+        start_date: formData.start_date,
+        end_date: formData.end_date,
+        status: formData.status,
+        registration_deadline: formData.registration_deadline || null,
+        max_teams_per_division: formData.max_teams_per_division ? Number(formData.max_teams_per_division) : null,
+        match_format: formData.match_format || null,
+        entry_fee: formData.entry_fee ? Number(formData.entry_fee) : null
+        // Removed currency field as it doesn't exist in the database
+      };
+
+      const { error } = await supabase
+        .from('leagues')
+        .update(updateData)
+        .eq('id', leagueId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'League settings updated successfully',
+        variant: 'default'
+      });
+
+      onUpdate(); // Refresh league data
+    } catch (error) {
+      console.error('Error updating league settings:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update league settings. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="space-y-4">
+        <div>
+          <Label htmlFor="name">League Name</Label>
+          <Input
+            id="name"
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            required
+            className="mt-1"
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="description">Description</Label>
+          <Input
+            id="description"
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            className="mt-1"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Brief description of the league (optional)
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="start_date">Start Date</Label>
+            <Input
+              id="start_date"
+              name="start_date"
+              type="date"
+              value={formData.start_date}
+              onChange={handleChange}
+              required
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="end_date">End Date</Label>
+            <Input
+              id="end_date"
+              name="end_date"
+              type="date"
+              value={formData.end_date}
+              onChange={handleChange}
+              required
+              className="mt-1"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="registration_deadline">Registration Deadline</Label>
+            <Input
+              id="registration_deadline"
+              name="registration_deadline"
+              type="date"
+              value={formData.registration_deadline}
+              onChange={handleChange}
+              className="mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Last day teams can register for the league
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="max_teams_per_division">Maximum Teams per Division</Label>
+            <Input
+              id="max_teams_per_division"
+              name="max_teams_per_division"
+              type="number"
+              min="2"
+              value={formData.max_teams_per_division}
+              onChange={handleChange}
+              className="mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Limit the number of teams in each division
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="match_format">Match Format</Label>
+            <Select
+              name="match_format"
+              value={formData.match_format.toString()}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, match_format: value }))}>
+              <SelectTrigger id="match_format" className="mt-1">
+                <SelectValue placeholder="Select match format" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="best_of_3">Best of 3 Sets</SelectItem>
+                <SelectItem value="best_of_5">Best of 5 Sets</SelectItem>
+                <SelectItem value="single_set">Single Set</SelectItem>
+                <SelectItem value="timed">Timed Match</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Format used for matches in this league
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="entry_fee">Entry Fee</Label>
+            <div className="flex gap-2 mt-1">
+              <div className="w-1/3">
+                <Select
+                  name="currency"
+                  value={formData.currency}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, currency: value }))}
+                >
+                  <SelectTrigger id="currency">
+                    <SelectValue placeholder="Currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ZAR">ZAR (R)</SelectItem>
+                    <SelectItem value="USD">USD ($)</SelectItem>
+                    <SelectItem value="EUR">EUR (€)</SelectItem>
+                    <SelectItem value="GBP">GBP (£)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="relative flex-1">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">
+                  {formData.currency === 'ZAR' ? 'R' :
+                    formData.currency === 'USD' ? '$' :
+                      formData.currency === 'EUR' ? '€' :
+                        formData.currency === 'GBP' ? '£' : 'R'}
+                </span>
+                <Input
+                  id="entry_fee"
+                  name="entry_fee"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.entry_fee}
+                  onChange={handleChange}
+                  className="pl-7"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Fee to join the league (leave empty if free)
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <Label htmlFor="status">League Status</Label>
+          <Select name="status" value={formData.status} onValueChange={(value) => setFormData(prev => ({ ...prev, status: value }))}>
+            <SelectTrigger id="status" className="mt-1">
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="upcoming">Upcoming</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Division Management Section */}
+      <div className="border-t pt-6 mt-6">
+        <h3 className="text-lg font-medium mb-4">Division Management</h3>
+
+        <div className="space-y-4">
+          {/* Existing Divisions */}
+          <div className="bg-muted/30 rounded-md p-4">
+            <h4 className="text-sm font-medium mb-3">Current Divisions</h4>
+
+            {divisions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No divisions created yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {divisions.map((division) => (
+                  <div key={division.id} className="flex items-center justify-between bg-background p-2 rounded-md border">
+                    {isEditingDivision === division.id ? (
+                      <Input
+                        value={editedDivisionName}
+                        onChange={(e) => setEditedDivisionName(e.target.value)}
+                        className="w-full max-w-xs"
+                        autoFocus
+                      />
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{division.name}</span>
+                        <Badge variant="outline" className="text-xs">Level {division.level}</Badge>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      {isEditingDivision === division.id ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={async () => {
+                              try {
+                                const { error } = await supabase
+                                  .from('divisions')
+                                  .update({ name: editedDivisionName })
+                                  .eq('id', division.id);
+
+                                if (error) throw error;
+
+                                toast({
+                                  title: 'Success',
+                                  description: 'Division name updated',
+                                  variant: 'default'
+                                });
+
+                                setIsEditingDivision(null);
+                                fetchDivisions(); // Refresh divisions
+                              } catch (error) {
+                                console.error('Error updating division:', error);
+                                toast({
+                                  title: 'Error',
+                                  description: 'Failed to update division',
+                                  variant: 'destructive'
+                                });
+                              }
+                            }}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setIsEditingDivision(null)}
+                          >
+                            Cancel
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setIsEditingDivision(division.id);
+                              setEditedDivisionName(division.name);
+                            }}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:bg-destructive/10"
+                            onClick={async () => {
+                              // Check if division has teams
+                              const teamsInDivision = teams.filter(team => team.division?.id === division.id);
+                              if (teamsInDivision.length > 0) {
+                                toast({
+                                  title: 'Cannot Delete',
+                                  description: `This division has ${teamsInDivision.length} teams assigned to it. Reassign teams first.`,
+                                  variant: 'destructive'
+                                });
+                                return;
+                              }
+
+                              try {
+                                const { error } = await supabase
+                                  .from('divisions')
+                                  .delete()
+                                  .eq('id', division.id);
+
+                                if (error) throw error;
+
+                                toast({
+                                  title: 'Success',
+                                  description: 'Division deleted',
+                                  variant: 'default'
+                                });
+
+                                fetchDivisions(); // Refresh divisions
+                              } catch (error) {
+                                console.error('Error deleting division:', error);
+                                toast({
+                                  title: 'Error',
+                                  description: 'Failed to delete division',
+                                  variant: 'destructive'
+                                });
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add New Division */}
+          <div className="bg-muted/30 rounded-md p-4">
+            <h4 className="text-sm font-medium mb-3">Add New Division</h4>
+
+            {isAddingDivision ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Input
+                    value={newDivisionName}
+                    onChange={(e) => setNewDivisionName(e.target.value)}
+                    placeholder="Division name"
+                    className="w-full max-w-xs"
+                  />
+                  <Select defaultValue={(divisions.length + 1).toString()}>
+                    <SelectTrigger className="w-24">
+                      <SelectValue placeholder="Level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[...Array(10)].map((_, i) => (
+                        <SelectItem key={i} value={(i + 1).toString()}>Level {i + 1}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={async () => {
+                      if (!newDivisionName.trim()) {
+                        toast({
+                          title: 'Error',
+                          description: 'Division name cannot be empty',
+                          variant: 'destructive'
+                        });
+                        return;
+                      }
+
+                      try {
+                        const { error } = await supabase
+                          .from('divisions')
+                          .insert({
+                            league_id: leagueId,
+                            name: newDivisionName,
+                            level: divisions.length + 1
+                          });
+
+                        if (error) throw error;
+
+                        toast({
+                          title: 'Success',
+                          description: 'New division added',
+                          variant: 'default'
+                        });
+
+                        setNewDivisionName('');
+                        setIsAddingDivision(false);
+                        fetchDivisions(); // Refresh divisions
+                      } catch (error) {
+                        console.error('Error adding division:', error);
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to add division',
+                          variant: 'destructive'
+                        });
+                      }
+                    }}
+                  >
+                    Add Division
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setIsAddingDivision(false);
+                      setNewDivisionName('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => setIsAddingDivision(true)}
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                Add New Division
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-6">
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+              Saving...
+            </>
+          ) : (
+            'Save Changes'
+          )}
+        </Button>
+      </div>
+    </form>
+  );
+};
 
 interface League {
   id: string;
@@ -41,339 +619,203 @@ interface League {
   start_date: string;
   end_date: string;
   status: string;
-  created_by: string;
-  created_at: string | null;
-  updated_at: string | null;
-  match_format: string | null;
-  max_teams_per_division: number | null;
+  registration_deadline?: string;
+  max_teams_per_division?: number;
+  match_format?: string;
+  entry_fee?: number;
+  currency?: string;
 }
 
-interface TeamRegistration {
+interface Team {
   id: string;
-  team_id: string;
-  league_id: string;
-  division_id: string;
-  status: string | null; // Change this line
-  registered_at: string | null; // Change this line
-  matches_played: number | null; // Add this line
-  matches_won: number | null; // Add this line  
-  points: number | null; // Add this line
-  team: {
+  name: string;
+  player1: {
+    id: string;
+    full_name: string;
+    email?: string;
+  };
+  player2?: {
+    id: string;
+    full_name: string;
+    email?: string;
+  };
+  division?: {
     id: string;
     name: string;
-    player1_id: string;
-    player2_id: string | null;
-    player1: {
-      full_name: string;
-      email: string;
-    };
-    player2: {
-      full_name: string;
-      email: string;
-    } | null;
-  };
-  division: {
-    name: string;
-    level: number;
   };
 }
 
 interface Division {
   id: string;
-  league_id: string;
   name: string;
   level: number;
-  max_teams: number;
-  created_at: string;
 }
 
-interface LeaderboardEntry {
-  rank: number;
-  team_id: string;
-  team_name: string;
-  matches_played: number;
-  matches_won: number;
-  matches_lost: number;
-  points: number;
-  is_user_team?: boolean;
+interface Profile {
+  id: string;
+  full_name: string;
+  email?: string;
 }
-
-interface DivisionStandings {
-  division_id: string;
-  division_name: string;
-  level: number;
-  teams: LeaderboardEntry[];
-}
-
-// interface Match {
-//   id: string;
-//   league_id: string;
-//   division_id: string;
-//   team1_id: string;
-//   team2_id: string;
-//   round_number: number;
-//   match_number: number;
-//   scheduled_date: string | null;
-//   scheduled_time: string | null;
-//   venue: string | null;
-//   status: string;
-//   created_by: string | null;
-//   created_at: string;
-//   updated_at: string;
-//   team1?: {
-//   name: string;
-//   };
-//   team2?: {
-//     name: string;
-//   };
-//     division?: {
-//       name: string;
-//       level: number;
-//     };
- // }
-
-interface MatchConfirmation {
-  id?: string;
-  match_id: string;
-  team_id: string;
-  status: string;
-  response_notes?: string;
-  responded_at?: string;
-  created_at?: string;
-};
 
 const ManageLeague = () => {
-  const { leagueId } = useParams();
-  const navigate = useNavigate();
+  const { leagueId } = useParams<{ leagueId: string }>();
   const { profile } = useAuth();
-  
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [league, setLeague] = useState<League | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  
-  // Team registration states
-  const [teamRegistrations, setTeamRegistrations] = useState<TeamRegistration[]>([]);
-  const [loadingRegistrations, setLoadingRegistrations] = useState(true);
-  const [processingRegistration, setProcessingRegistration] = useState<string | null>(null);
-  const [registrationMessage, setRegistrationMessage] = useState<string | null>(null);
-  
-  // Fixture generation states
-  const [adminMatches, setAdminMatches] = useState<any[]>([]);
-  const [pendingConfirmationsAdmin, setPendingConfirmationsAdmin] = useState<any[]>([]);
-  const [upcomingMatchesAdmin, setUpcomingMatchesAdmin] = useState<any[]>([]);
-  const [completedMatchesAdmin, setCompletedMatchesAdmin] = useState<any[]>([]);
-  const [registeredTeams, setRegisteredTeams] = useState<TeamRegistration[]>([]);
-  const [generatingFixtures, setGeneratingFixtures] = useState(false);
-  const [isGeneratingMatches, setIsGeneratingMatches] = useState(false);
-  const [isGeneratingFixtures, setIsGeneratingFixtures] = useState(false);
-  const [schedulingMatch, setSchedulingMatch] = useState<string | null>(null);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
-  const [fixtures, setFixtures] = useState<Match[]>([]);
-  const [isClearingMatches, setIsClearingMatches] = useState(false);
-  const [showRescheduleForm, setShowRescheduleForm] = useState<string | null>(null);
-  const [rescheduleForm, setRescheduleForm] = useState({
-    matchId: '',
-    date: '',
-    time: '',
-    venue: ''
-});
-  const [scoreModalOpen, setScoreModalOpen] = useState(false);
-  const [selectedMatchForScoring, setSelectedMatchForScoring] = useState<any>(null);
-  
-  // Form state
-  const [formData, setFormData] = useState({
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('teams');
+
+  // Team management state
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState({
     name: '',
-    description: '',
-    start_date: '',
-    end_date: '',
-    status: '',
-    venue: '',
-    max_teams: '',
-    registration_deadline: ''
+    player1Id: '',
+    player2Id: '',
+    divisionId: ''
   });
-  const [processing, setProcessing] = useState<string | null>(null);
-  const [scheduleForm, setScheduleForm] = useState({
-    matchId: '',
+  const [addFormData, setAddFormData] = useState({
+    name: '',
+    player1Id: '',
+    player2Id: '',
+    divisionId: ''
+  });
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+
+  // Match management state
+  const [matches, setMatches] = useState<any[]>([]);
+  const [selectedMatch, setSelectedMatch] = useState<any>(null);
+  const [isCreateMatchDialogOpen, setIsCreateMatchDialogOpen] = useState(false);
+  const [isEditMatchDialogOpen, setIsEditMatchDialogOpen] = useState(false);
+  const [isDeleteMatchDialogOpen, setIsDeleteMatchDialogOpen] = useState(false);
+  const [isGenerateMatchesDialogOpen, setIsGenerateMatchesDialogOpen] = useState(false);
+  const [isBulkScheduleDialogOpen, setIsBulkScheduleDialogOpen] = useState(false);
+  const [isClearMatchesDialogOpen, setIsClearMatchesDialogOpen] = useState(false);
+  const [clearMatchesConfirmation, setClearMatchesConfirmation] = useState('');
+  const [filteredTeams, setFilteredTeams] = useState<Team[]>([]);
+  const [generatedMatches, setGeneratedMatches] = useState<any[]>([]);
+  const [selectedMatchDivision, setSelectedMatchDivision] = useState<string>('all');
+  const [filteredMatches, setFilteredMatches] = useState<any[]>([]);
+  const [pendingMatches, setPendingMatches] = useState<any[]>([]);
+  const [upcomingMatches, setUpcomingMatches] = useState<any[]>([]);
+  const [completedMatches, setCompletedMatches] = useState<any[]>([]);
+  const [matchesActiveTab, setMatchesActiveTab] = useState('all');
+  const [generateMatchesFormData, setGenerateMatchesFormData] = useState({
+    divisionId: ''
+  });
+  const [bulkScheduleFormData, setBulkScheduleFormData] = useState({
     date: '',
     time: '',
-    venue: ''
+    venue: '',
+    status: 'pending'
   });
-  const calculateLeaderboard = (matches: any[], divisions: Division[], userTeamIds: string[] = []) => {
-  const standings: DivisionStandings[] = [];
-
-  divisions.forEach(division => {
-    // Get completed matches for this division
-    const divisionMatches = matches.filter(match => 
-      match.division_id === division.id && 
-      match.status === 'completed' &&
-      match.team1_score !== null && 
-      match.team2_score !== null
-    );
-
-    // Get all teams in this division from league registrations
-    const divisionTeams = teamRegistrations.filter(reg => 
-      reg.division_id === division.id && 
-      reg.status === 'approved'
-    );
-
-    // Calculate stats for each team
-    const teamStats: { [key: string]: LeaderboardEntry } = {};
-
-    divisionTeams.forEach(registration => {
-      const team = registration.team;
-      teamStats[team.id] = {
-        rank: 0, // Will be calculated after sorting
-        team_id: team.id,
-        team_name: team.name,
-        matches_played: 0,
-        matches_won: 0,
-        matches_lost: 0,
-        points: 0,
-        is_user_team: userTeamIds.includes(team.id)
-      };
-    });
-
-    // Process matches to calculate stats
-    divisionMatches.forEach(match => {
-      const team1_id = match.team1_id;
-      const team2_id = match.team2_id;
-      const team1_score = match.team1_score;
-      const team2_score = match.team2_score;
-
-      // Ensure both teams exist in stats
-      if (teamStats[team1_id] && teamStats[team2_id]) {
-        // Update matches played
-        teamStats[team1_id].matches_played++;
-        teamStats[team2_id].matches_played++;
-
-        // Determine winner and update stats
-        if (team1_score > team2_score) {
-          // Team 1 wins
-          teamStats[team1_id].matches_won++;
-          teamStats[team1_id].points += 3;
-          teamStats[team2_id].matches_lost++;
-          teamStats[team2_id].points += 1;
-        } else if (team2_score > team1_score) {
-          // Team 2 wins
-          teamStats[team2_id].matches_won++;
-          teamStats[team2_id].points += 3;
-          teamStats[team1_id].matches_lost++;
-          teamStats[team1_id].points += 1;
-        }
-      }
-    });
-
-    // Convert to array and sort by points (descending), then by matches won
-    const sortedTeams = Object.values(teamStats).sort((a, b) => {
-      if (b.points !== a.points) return b.points - a.points;
-      if (b.matches_won !== a.matches_won) return b.matches_won - a.matches_won;
-      return a.matches_lost - b.matches_lost; // Fewer losses as tiebreaker
-    });
-
-    // Assign ranks
-    sortedTeams.forEach((team, index) => {
-      team.rank = index + 1;
-    });
-
-    standings.push({
-      division_id: division.id,
-      division_name: division.name,
-      level: division.level,
-      teams: sortedTeams
-    });
+  const [matchFormData, setMatchFormData] = useState({
+    divisionId: '',
+    team1Id: '',
+    team2Id: '',
+    date: '',
+    time: '',
+    venue: '',
+    status: 'pending'
   });
-
-  // Sort divisions by level (A, B, C, etc.)
-  standings.sort((a, b) => a.level - b.level);
-
-  return standings;
-};
+  const [editMatchFormData, setEditMatchFormData] = useState({
+    divisionId: '',
+    team1Id: '',
+    team2Id: '',
+    date: '',
+    time: '',
+    venue: '',
+    status: ''
+  });
 
   useEffect(() => {
-  fetchLeagueData();
-}, [leagueId, profile?.id]);
+    if (!profile || (profile.role !== 'league_admin' && profile.role !== 'super_admin')) {
+      toast({
+        title: 'Access Denied',
+        description: 'You do not have permission to manage leagues.',
+        variant: 'destructive'
+      });
+      navigate('/');
+      return;
+    }
 
-useEffect(() => {
-  if (leagueId) {
-    fetchTeamRegistrations();
+    fetchLeague();
+    fetchTeams();
     fetchDivisions();
-    fetchRegisteredTeams();
-    fetchFixtures();
-    fetchAdminMatches();
-  }
-}, [leagueId]);
+    fetchProfiles();
+  }, [profile, leagueId]);
 
-  const fetchLeagueData = async () => {
-    if (!leagueId || !profile) return;
+  const fetchLeague = async () => {
+    if (!leagueId) return;
 
+    setLoading(true);
     try {
-      const { data: leagueData, error: leagueError } = await supabase
+      const { data, error } = await supabase
         .from('leagues')
         .select('*')
         .eq('id', leagueId)
         .single();
 
-      if (leagueError) throw leagueError;
-
-      // Check if user is authorized to manage this league
-      if (leagueData.created_by !== profile.id && profile.role !== 'super_admin') {
-        setError('You are not authorized to manage this league.');
-        return;
-      }
-
-      setLeague(leagueData);
-      setFormData({
-        name: leagueData.name || '',
-        description: leagueData.description || '',
-        start_date: leagueData.start_date || '',
-        end_date: leagueData.end_date || '',
-        status: leagueData.status || 'draft',
-        venue: '', // Not in current schema
-        max_teams: leagueData.max_teams_per_division?.toString() || '',
-        registration_deadline: '' // Not in current schema
-      });
-
+      if (error) throw error;
+      setLeague(data);
     } catch (error) {
-      console.error('Error fetching league data:', error);
-      setError('Failed to load league data.');
+      console.error('Error fetching league:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load league information.',
+        variant: 'destructive'
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  
+  const fetchTeams = async () => {
+    if (!leagueId) return;
 
-  const fetchTeamRegistrations = async () => {
-  if (!leagueId) return;
+    try {
+      const { data: registrations, error: regError } = await supabase
+        .from('league_registrations')
+        .select(`
+          team_id,
+          division_id,
+          team:teams (
+            id,
+            name,
+            player1:profiles!teams_player1_id_fkey (id, full_name, email),
+            player2:profiles!teams_player2_id_fkey (id, full_name, email)
+          ),
+          division:divisions (id, name)
+        `)
+        .eq('league_id', leagueId);
 
-  setLoadingRegistrations(true);
-      try {
-        const { data, error } = await supabase
-          .from('league_registrations')  // Changed back
-          .select(`
-            *,
-            team:teams (
-              id,
-              name,
-              player1_id,
-              player2_id,
-              player1:profiles!teams_player1_id_fkey(full_name, email),
-              player2:profiles!teams_player2_id_fkey(full_name, email)
-            ),
-            division:divisions (name, level)
-          `)
-          .eq('league_id', leagueId)
-          .order('registered_at', { ascending: false });
-        if (error) throw error;
-        setTeamRegistrations(data || []);
-      } catch (error) {
-        console.error('Error fetching team registrations:', error);
-      } finally {
-        setLoadingRegistrations(false);
-      }
-    };
+      if (regError) throw regError;
+
+      // Transform the data to match our Team interface
+      const transformedTeams = registrations?.map(reg => ({
+        id: reg.team.id,
+        name: reg.team.name,
+        player1: reg.team.player1,
+        player2: reg.team.player2,
+        division: reg.division
+      })) || [];
+
+      setTeams(transformedTeams);
+    } catch (error) {
+      console.error('Error fetching teams:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load teams. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
 
   const fetchDivisions = async () => {
     if (!leagueId) return;
@@ -381,7 +823,7 @@ useEffect(() => {
     try {
       const { data, error } = await supabase
         .from('divisions')
-        .select('*')
+        .select('id, name, level')
         .eq('league_id', leagueId)
         .order('level');
 
@@ -392,581 +834,665 @@ useEffect(() => {
     }
   };
 
-      const handleConfirmMatch = async (confirmationId: string) => {
-      setProcessing(confirmationId);
-      try {
-        const supabaseAny = supabase as any;
-        const { data: confirmationData, error: confirmError } = await supabaseAny
-          .from('match_confirmations')
-          .select('match_id')
-          .eq('id', confirmationId)
-          .single();
-        if (confirmError) throw confirmError;
-        
-        const { data, error } = await supabaseAny
-          .from('match_confirmations')
-          .update({ 
-            status: 'confirmed',
-            responded_at: new Date().toISOString()
-          })
-          .eq('id', confirmationId)
-          .select();
-        if (error) throw error;
-        
-        const { data: allConfirmations, error: allConfirmError } = await supabaseAny
-          .from('match_confirmations')
-          .select('status')
-          .eq('match_id', confirmationData.match_id);
-        if (allConfirmError) throw allConfirmError;
-        
-        const allConfirmed = allConfirmations.every(conf => conf.status === 'confirmed');
-        if (allConfirmed) {
-          console.log('All teams confirmed - updating match status to confirmed');
-          const { error: matchUpdateError } = await supabase
-            .from('matches')
-            .update({ status: 'confirmed' })
-            .eq('id', confirmationData.match_id);
-          if (matchUpdateError) {
-            console.error('Error updating match status:', matchUpdateError);
-          }
-        }
-        
-        setPendingConfirmationsAdmin(prev => prev.filter(c => c.id !== confirmationId));
-        await fetchMatches();
-      } catch (error) {
-        console.error('Error confirming match:', error);
-      } finally {
-        setProcessing(null);
-      }
-    };
-
-
-  const fetchRegisteredTeams = async () => {
-  if (!leagueId) return;
-
-      try {
-        const { data, error } = await supabase
-          .from('league_registrations')
-          .select(`
-            *,
-            team:teams(
-              id,
-              name,
-              player1_id,
-              player2_id,
-              player1:profiles!teams_player1_id_fkey(full_name, email),
-              player2:profiles!teams_player2_id_fkey(full_name, email)
-            ),
-            division:divisions(name, level)
-          `)
-          .eq('league_id', leagueId)
-          .order('registered_at', { ascending: false });
-
-        if (error) throw error;
-        setRegisteredTeams(data || []);
-      } catch (error) {
-        console.error('Error fetching registered teams:', error);
-      }
-    };
-
-  const fetchFixtures = async () => {
-  if (!leagueId) return;
-
-  try {
-    const { data, error } = await supabase
-      .from('matches')
-      .select(`
-        id,
-        league_id,
-        division_id,
-        team1_id,
-        team2_id,
-        scheduled_date,
-        scheduled_time,
-        venue,
-        status,
-        team1_score,
-        team2_score,
-        winner_team_id,
-        match_duration,
-        created_at,
-        updated_at,
-        round_number,
-        match_number,
-        created_by,
-        team1:teams!matches_team1_id_fkey(name),
-        team2:teams!matches_team2_id_fkey(name),
-        division:divisions(name, level)
-      `)
-      .eq('league_id', leagueId)
-      .order('match_number');
-
-    if (error) throw error;
-    setFixtures(data || []);
-  } catch (error) {
-    console.error('Error fetching fixtures:', error);
-  }
-};
-
-  const createMatchConfirmationsForAllMatches = async (leagueId: string) => {
+  const fetchProfiles = async () => {
     try {
-      // Get all newly created matches for this league
-      const { data: matches, error: matchesError } = await supabase
-        .from('matches')
-        .select('id, team1_id, team2_id')
-        .eq('league_id', leagueId)
-        .eq('status', 'scheduled'); // Only for new matches
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .order('full_name');
 
-      if (matchesError) throw matchesError;
-
-      // Create confirmations for all matches
-      const confirmations = [];
-      for (const match of matches || []) {
-        confirmations.push(
-          { match_id: match.id, team_id: match.team1_id, status: 'pending' },
-          { match_id: match.id, team_id: match.team2_id, status: 'pending' }
-        );
-      }
-
-      if (confirmations.length > 0) {
-        const supabaseAny = supabase as any; // Type workaround
-        const { error: confirmError } = await supabaseAny
-          .from('match_confirmations')
-          .upsert(confirmations);
-
-        if (confirmError) throw confirmError;
-        console.log(`Created ${confirmations.length} match confirmations`);
-      }
-      
+      if (error) throw error;
+      setProfiles(data || []);
     } catch (error) {
-      console.error('Error creating match confirmations:', error);
-      // Don't throw - fixture generation should still succeed even if confirmations fail
+      console.error('Error fetching profiles:', error);
     }
   };
 
-      const checkAndUpdateMatchStatuses = async () => {
-      if (!leagueId) return;
-      
-      try {
-        // Get all scheduled matches for this league
-        const { data: scheduledMatches, error: matchesError } = await supabase
-          .from('matches')
-          .select('id')
-          .eq('league_id', leagueId)
-          .eq('status', 'scheduled');
+  const handleEditClick = (team: Team) => {
+    setSelectedTeam(team);
+    setEditFormData({
+      name: team.name,
+      player1Id: team.player1.id,
+      player2Id: team.player2?.id || 'none',
+      divisionId: team.division?.id || ''
+    });
+    setIsEditDialogOpen(true);
+  };
 
-        if (matchesError) throw matchesError;
+  const handleDeleteClick = (team: Team) => {
+    setSelectedTeam(team);
+    setDeleteConfirmation('');
+    setIsDeleteDialogOpen(true);
+  };
 
-        for (const match of scheduledMatches || []) {
-          // Check confirmations for this match
-          const { data: confirmations, error: confirmError } = await supabase
-            .from('match_confirmations' as any)
-            .select('status')
-            .eq('match_id', match.id);
+  const handleAddClick = () => {
+    setAddFormData({
+      name: '',
+      player1Id: '',
+      player2Id: 'none',
+      divisionId: ''
+    });
+    setIsAddDialogOpen(true);
+  };
 
-          if (confirmError) continue;
+  const handleEditSubmit = async () => {
+    if (!selectedTeam) return;
 
-          const confirmedCount = confirmations?.filter(c => c.status === 'confirmed').length || 0;
-          const totalCount = confirmations?.length || 0;
+    try {
+      // Update team name and players
+      const { error: teamError } = await supabase
+        .from('teams')
+        .update({
+          name: editFormData.name,
+          player1_id: editFormData.player1Id,
+          player2_id: editFormData.player2Id === "none" ? null : editFormData.player2Id || null
+        })
+        .eq('id', selectedTeam.id);
 
-          // If all teams confirmed, update match status
-          if (confirmedCount === totalCount && totalCount > 0) {
-            console.log(`All teams confirmed for match ${match.id} - updating status`);
-            
-            const { error: updateError } = await supabase
-              .from('matches')
-              .update({ status: 'confirmed' })
-              .eq('id', match.id);
+      if (teamError) throw teamError;
 
-            if (updateError) {
-              console.error('Error updating match status:', updateError);
-            } else {
-              console.log(`✅ Match ${match.id} status updated to confirmed`);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error checking match statuses:', error);
+      // Update division in league_registrations
+      const { error: regError } = await supabase
+        .from('league_registrations')
+        .update({
+          division_id: editFormData.divisionId
+        })
+        .eq('team_id', selectedTeam.id)
+        .eq('league_id', leagueId);
+
+      if (regError) throw regError;
+
+      toast({
+        title: 'Success',
+        description: 'Team updated successfully',
+        variant: 'default'
+      });
+
+      // Refresh teams list
+      fetchTeams();
+      setIsEditDialogOpen(false);
+    } catch (error) {
+      console.error('Error updating team:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update team. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleDeleteSubmit = async () => {
+    if (!selectedTeam || deleteConfirmation !== selectedTeam.name) return;
+
+    try {
+      // First, delete the team from league_registrations
+      const { error: regError } = await supabase
+        .from('league_registrations')
+        .delete()
+        .eq('team_id', selectedTeam.id)
+        .eq('league_id', leagueId);
+
+      if (regError) throw regError;
+
+      // Then, delete the team itself
+      const { error: teamError } = await supabase
+        .from('teams')
+        .delete()
+        .eq('id', selectedTeam.id);
+
+      if (teamError) throw teamError;
+
+      toast({
+        title: 'Success',
+        description: 'Team deleted successfully',
+        variant: 'default'
+      });
+
+      // Refresh teams list
+      fetchTeams();
+      setIsDeleteDialogOpen(false);
+    } catch (error) {
+      console.error('Error deleting team:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete team. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleAddSubmit = async () => {
+    try {
+      // First, create the team
+      const { data: newTeam, error: teamError } = await supabase
+        .from('teams')
+        .insert({
+          name: addFormData.name,
+          player1_id: addFormData.player1Id,
+          player2_id: addFormData.player2Id === "none" ? null : addFormData.player2Id || null
+        })
+        .select('id')
+        .single();
+
+      if (teamError) throw teamError;
+
+      // Then, register the team in the league
+      const { error: regError } = await supabase
+        .from('league_registrations')
+        .insert({
+          league_id: leagueId,
+          team_id: newTeam.id,
+          division_id: addFormData.divisionId,
+          points: 0,
+          matches_played: 0,
+          matches_won: 0
+        });
+
+      if (regError) throw regError;
+
+      toast({
+        title: 'Success',
+        description: 'Team added successfully',
+        variant: 'default'
+      });
+
+      // Refresh teams list
+      fetchTeams();
+      setIsAddDialogOpen(false);
+    } catch (error) {
+      console.error('Error adding team:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add team. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Match management functions
+  useEffect(() => {
+    if (activeTab === 'matches') {
+      fetchMatches();
+    }
+  }, [activeTab, leagueId]);
+
+  // Filter and categorize matches when matches data or division filter changes
+  useEffect(() => {
+    if (matches.length > 0) {
+      // Filter matches by division if a specific division is selected
+      let filtered = matches;
+      if (selectedMatchDivision !== 'all') {
+        filtered = matches.filter(match => match.division_id === selectedMatchDivision);
       }
-    };
 
-    const handleGenerateFixtures = async () => {
+      setFilteredMatches(filtered);
+
+      // Categorize matches by status
+      setPendingMatches(filtered.filter(match => match.status === 'pending'));
+      setUpcomingMatches(filtered.filter(match => match.status === 'confirmed' && !match.team1_score && !match.team2_score));
+      setCompletedMatches(filtered.filter(match => match.status === 'completed' || match.team1_score !== null || match.team2_score !== null));
+    }
+  }, [matches, selectedMatchDivision]);
+
+  const fetchMatches = async () => {
     if (!leagueId) return;
-    
-    setIsGeneratingFixtures(true);
+
     try {
-      const result = await generateRoundRobinMatches(leagueId);
-      
-      if (result.success) {
-        // Create match confirmations for all new matches
-        await createMatchConfirmationsForAllMatches(leagueId);
-        
-        await fetchFixtures(); // Refresh the fixtures
-        setRegistrationMessage(`Generated ${result.matchesGenerated} fixtures with confirmations across ${result.divisions} divisions`);
-      } else {
-        setRegistrationMessage(result.error || 'Failed to generate fixtures');
+      const { data, error } = await supabase
+        .from('matches')
+        .select(`
+          id,
+          team1_id,
+          team2_id,
+          division_id,
+          scheduled_date,
+          scheduled_time,
+          venue,
+          status,
+          team1:teams!matches_team1_id_fkey (id, name),
+          team2:teams!matches_team2_id_fkey (id, name),
+          division:divisions (id, name)
+        `)
+        .eq('league_id', leagueId)
+        .order('scheduled_date', { ascending: true });
+
+      if (error) throw error;
+      setMatches(data || []);
+    } catch (error) {
+      console.error('Error fetching matches:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load matches. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleEditMatchClick = (match: any) => {
+    setSelectedMatch(match);
+
+    // Filter teams by the match's division
+    const divisionTeams = teams.filter(team =>
+      team.division?.id === match.division_id
+    );
+    setFilteredTeams(divisionTeams);
+
+    setEditMatchFormData({
+      divisionId: match.division_id || '',
+      team1Id: match.team1_id || '',
+      team2Id: match.team2_id || '',
+      date: match.scheduled_date || '',
+      time: match.scheduled_time || '',
+      venue: match.venue || '',
+      status: match.status || ''
+    });
+
+    setIsEditMatchDialogOpen(true);
+  };
+
+  const handleDeleteMatchClick = (match: any) => {
+    setSelectedMatch(match);
+    setIsDeleteMatchDialogOpen(true);
+  };
+
+  const handleCreateMatchSubmit = async () => {
+    try {
+      const { error } = await supabase
+        .from('matches')
+        .insert({
+          league_id: leagueId,
+          division_id: matchFormData.divisionId,
+          team1_id: matchFormData.team1Id,
+          team2_id: matchFormData.team2Id,
+          scheduled_date: matchFormData.date,
+          scheduled_time: matchFormData.time || null,
+          venue: matchFormData.venue || null,
+          status: matchFormData.status
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Match created successfully',
+        variant: 'default'
+      });
+
+      // Reset form and refresh matches
+      setMatchFormData({
+        divisionId: '',
+        team1Id: '',
+        team2Id: '',
+        date: '',
+        time: '',
+        venue: '',
+        status: 'pending'
+      });
+      fetchMatches();
+      setIsCreateMatchDialogOpen(false);
+    } catch (error) {
+      console.error('Error creating match:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create match. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleEditMatchSubmit = async () => {
+    if (!selectedMatch) return;
+
+    try {
+      const { error } = await supabase
+        .from('matches')
+        .update({
+          division_id: editMatchFormData.divisionId,
+          team1_id: editMatchFormData.team1Id,
+          team2_id: editMatchFormData.team2Id,
+          scheduled_date: editMatchFormData.date,
+          scheduled_time: editMatchFormData.time || null,
+          venue: editMatchFormData.venue || null,
+          status: editMatchFormData.status
+        })
+        .eq('id', selectedMatch.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Match updated successfully',
+        variant: 'default'
+      });
+
+      // Refresh matches list
+      fetchMatches();
+      setIsEditMatchDialogOpen(false);
+    } catch (error) {
+      console.error('Error updating match:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update match. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleDeleteMatchSubmit = async () => {
+    if (!selectedMatch) return;
+
+    try {
+      const { error } = await supabase
+        .from('matches')
+        .delete()
+        .eq('id', selectedMatch.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Match deleted successfully',
+        variant: 'default'
+      });
+
+      // Refresh matches list
+      fetchMatches();
+      setIsDeleteMatchDialogOpen(false);
+    } catch (error) {
+      console.error('Error deleting match:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete match. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Generate matches between all teams in a division
+  const handleGenerateMatches = async () => {
+    const divisionId = generateMatchesFormData.divisionId;
+    if (!divisionId) return;
+
+    try {
+      // Get all teams in the selected division
+      const divisionTeams = teams.filter(team => team.division?.id === divisionId);
+
+      if (divisionTeams.length < 2) {
+        toast({
+          title: 'Not enough teams',
+          description: 'You need at least 2 teams in this division to generate matches.',
+          variant: 'destructive'
+        });
+        return;
       }
-    } catch (error) {
-      setRegistrationMessage('Error generating fixtures');
-    } finally {
-      setIsGeneratingFixtures(false);
-    }
-  };
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
+      // Generate all possible team pairings (round-robin tournament style)
+      const generatedPairings = [];
+      for (let i = 0; i < divisionTeams.length; i++) {
+        for (let j = i + 1; j < divisionTeams.length; j++) {
+          generatedPairings.push({
+            team1Id: divisionTeams[i].id,
+            team1Name: divisionTeams[i].name,
+            team2Id: divisionTeams[j].id,
+            team2Name: divisionTeams[j].name,
+            divisionId: divisionId,
+            divisionName: divisionTeams[i].division?.name || 'Unknown Division'
+          });
+        }
+      }
 
-  const handleSave = async () => {
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const updateData: any = {
-        name: formData.name,
-        description: formData.description || null,
-        start_date: formData.start_date,
-        end_date: formData.end_date,
-        status: formData.status,
-        venue: formData.venue || null,
-        max_teams: formData.max_teams ? parseInt(formData.max_teams) : null,
-        registration_deadline: formData.registration_deadline || null
-      };
-
-      const { error } = await supabase
-        .from('leagues')
-        .update(updateData)
-        .eq('id', leagueId);
-
-      if (error) throw error;
-
-      setSuccess('League updated successfully!');
-      
-      // Refresh league data
-      await fetchLeagueData();
-
-      // Clear message after 3 seconds
-      setTimeout(() => setSuccess(null), 3000);
-
-    } catch (error) {
-      console.error('Error updating league:', error);
-      setError('Failed to update league. Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleRegistrationAction = async (registrationId: string, action: 'approve' | 'reject') => {
-    setProcessingRegistration(registrationId);
-    
-    try {
-      const newStatus = action === 'approve' ? 'approved' : 'rejected';
-      
-      const { error } = await supabase
-        .from('league_registrations')  // Changed back
-        .update({ status: newStatus })
-        .eq('id', registrationId);
-
-      if (error) throw error;
-
-      setTeamRegistrations(prev => 
-        prev.map(reg => 
-          reg.id === registrationId 
-            ? { ...reg, status: newStatus as 'approved' | 'rejected' }
-            : reg
+      // Check if any of these matches already exist
+      const existingMatches = matches.filter(match =>
+        match.division_id === divisionId &&
+        generatedPairings.some(pairing =>
+          (pairing.team1Id === match.team1_id && pairing.team2Id === match.team2_id) ||
+          (pairing.team1Id === match.team2_id && pairing.team2Id === match.team1_id)
         )
       );
 
-      setRegistrationMessage(
-        action === 'approve' 
-          ? 'Team registration approved successfully!' 
-          : 'Team registration rejected.'
-      );
+      if (existingMatches.length > 0) {
+        // Filter out pairings that already have matches
+        const filteredPairings = generatedPairings.filter(pairing =>
+          !existingMatches.some(match =>
+            (pairing.team1Id === match.team1_id && pairing.team2Id === match.team2_id) ||
+            (pairing.team1Id === match.team2_id && pairing.team2Id === match.team1_id)
+          )
+        );
 
-      setTimeout(() => setRegistrationMessage(null), 3000);
+        if (filteredPairings.length === 0) {
+          toast({
+            title: 'No new matches',
+            description: 'All possible matches between teams in this division already exist.',
+            variant: 'default'
+          });
+          setIsGenerateMatchesDialogOpen(false);
+          return;
+        }
 
+        setGeneratedMatches(filteredPairings);
+        toast({
+          title: 'Matches Generated',
+          description: `Generated ${filteredPairings.length} new matches. Some matches were skipped because they already exist.`,
+          variant: 'default'
+        });
+      } else {
+        setGeneratedMatches(generatedPairings);
+        toast({
+          title: 'Matches Generated',
+          description: `Generated ${generatedPairings.length} matches between teams in this division.`,
+          variant: 'default'
+        });
+      }
+
+      // Close the generate dialog and open the bulk schedule dialog
+      setIsGenerateMatchesDialogOpen(false);
+      setIsBulkScheduleDialogOpen(true);
     } catch (error) {
-      console.error('Error updating registration:', error);
-      setRegistrationMessage('Failed to update registration. Please try again.');
-    } finally {
-      setProcessingRegistration(null);
-    }
-  };
-
-  const generateFixtures = async (divisionId: string) => {
-    setGeneratingFixtures(true);
-    try {
-      const { data, error } = await (supabase as any).rpc('generate_round_robin_fixtures', {
-        p_league_id: leagueId,
-        p_division_id: divisionId,
-        p_created_by: profile?.id
+      console.error('Error generating matches:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to generate matches. Please try again.',
+        variant: 'destructive'
       });
-
-      if (error) throw error;
-
-      setSuccess(`${data?.[0]?.message || 'Fixtures generated successfully!'}`);
-      
-      // Refresh fixtures and registered teams
-      await fetchFixtures();
-      await fetchRegisteredTeams();
-
-    } catch (error) {
-      console.error('Error generating fixtures:', error);
-      setError('Failed to generate fixtures: ' + (error as Error).message);
-    } finally {
-      setGeneratingFixtures(false);
     }
   };
 
-    const handleScheduleMatch = async (matchId: string) => {
-      if (scheduleForm.matchId !== matchId || !scheduleForm.date || !scheduleForm.time) {
-        setError('Please provide both date and time for the match.');
-        return;
-      }
-      setProcessing(matchId);
-      try {
-        const { error } = await supabase
-          .from('matches')
-          .update({
-            scheduled_date: scheduleForm.date,
-            scheduled_time: scheduleForm.time,
-            venue: scheduleForm.venue || null,
-            status: 'scheduled' // FIXED: Not 'confirmed'
-          })
-          .eq('id', matchId);
-        if (error) throw error;
-        setSuccess('Match scheduled successfully! Teams will be notified to confirm.');
-        setScheduleForm({ matchId: '', date: '', time: '', venue: '' });
-        await fetchFixtures();
-        await fetchAdminMatches();
-        //const match = adminMatches.find(f => f.id === matchId);
-        //if (match) {
-          //await createMatchConfirmations(matchId, match.team1_id, match.team2_id);
-        //}
-        setTimeout(() => setSuccess(null), 3000);
-      } catch (error) {
-        console.error('Error scheduling match:', error);
-        setError('Failed to schedule match. Please try again.');
-      } finally {
-        setProcessing(null);
-      }
-    };
+  // Clear all matches and reset team statistics
+  const handleClearAllMatches = async () => {
+    if (clearMatchesConfirmation !== 'CLEAR ALL MATCHES') return;
 
- 
-
-// Add this function to create match confirmations
- const createMatchConfirmations = async (matchId: string, team1Id: string, team2Id: string) => {
     try {
-      const confirmations: MatchConfirmation[] = [
-        { match_id: matchId, team_id: team1Id, status: 'pending' },
-        { match_id: matchId, team_id: team2Id, status: 'pending' }
-      ];
-
-      const { error } = await (supabase as any)
-        .from('match_confirmations')
-        .upsert(confirmations);
-
-      if (error) throw error;
-      console.log('Match confirmations created successfully');
-    } catch (error) {
-      console.error('Error creating match confirmations:', error);
-      // Don't throw error - scheduling should still work even if confirmations fail
-    }
-  };
-
-   const handleClearMatches = async () => {
-    if (!leagueId) return;
-    
-    const confirmed = window.confirm('Are you sure you want to delete ALL matches? This cannot be undone.');
-    if (!confirmed) return;
-    
-    setIsClearingMatches(true);
-    
-    try {
-      // Step 1: Get all match IDs for this league
-      const { data: matches, error: matchesError } = await supabase
+      // Step 1: Delete all match confirmations for this league's matches
+      console.log('Deleting match confirmations...');
+      const { data: matchIds } = await supabase
         .from('matches')
         .select('id')
         .eq('league_id', leagueId);
 
-      if (matchesError) {
-        throw new Error(`Failed to fetch matches: ${matchesError.message}`);
-      }
-
-      // Step 2: Delete match confirmations first (to avoid foreign key constraint)
-      if (matches && matches.length > 0) {
-        const matchIds = matches.map(m => m.id);
-        
-        const { error: confirmError } = await supabase
-          .from('match_confirmations' as any)
+      if (matchIds && matchIds.length > 0) {
+        const ids = matchIds.map(m => m.id);
+        const { error: confirmationError } = await supabase
+          .from('match_confirmations')
           .delete()
-          .in('match_id', matchIds);
+          .in('match_id', ids);
 
-        if (confirmError) {
-          console.warn('Warning deleting confirmations:', confirmError.message);
-          // Don't throw - continue to delete matches even if confirmations fail
+        if (confirmationError) {
+          console.error('Error deleting match confirmations:', confirmationError);
         }
       }
 
-      // Step 3: Delete all matches for this league
-      const { error: matchDeleteError } = await supabase
+      // Step 2: Delete all matches in this league
+      console.log('Deleting all matches...');
+      const { error: matchError } = await supabase
         .from('matches')
         .delete()
         .eq('league_id', leagueId);
 
-      if (matchDeleteError) {
-        throw new Error(`Failed to delete matches: ${matchDeleteError.message}`);
-      }
+      if (matchError) throw matchError;
 
-      // Step 4: Refresh data and show success
-      await fetchFixtures();
-      await fetchAdminMatches(); // Also refresh admin matches
-      setRegistrationMessage(`Successfully cleared ${matches?.length || 0} matches and their confirmations`);
-      
+      // Step 3: Reset all team statistics in this league
+      console.log('Resetting team statistics...');
+      const { error: statsError } = await supabase
+        .from('league_registrations')
+        .update({
+          points: 0,
+          matches_played: 0,
+          matches_won: 0
+        })
+        .eq('league_id', leagueId);
+
+      if (statsError) throw statsError;
+
+      toast({
+        title: 'Success',
+        description: 'All matches have been cleared and team statistics have been reset.',
+        variant: 'default'
+      });
+
+      // Reset and close dialog
+      setClearMatchesConfirmation('');
+      setIsClearMatchesDialogOpen(false);
+
+      // Refresh matches list
+      fetchMatches();
     } catch (error) {
       console.error('Error clearing matches:', error);
-      setRegistrationMessage(`Error clearing matches: ${(error as Error).message}`);
-    } finally {
-      setIsClearingMatches(false);
-    }  };
-
-  const fetchAdminMatches = async () => {
-  if (!leagueId) return;
-    await checkAndUpdateMatchStatuses();
-  try {
-    const { data: matches, error: matchesError } = await supabase
-      .from('matches')
-      .select(`
-        id,
-        league_id,
-        division_id,
-        team1_id,
-        team2_id,
-        scheduled_date,
-        scheduled_time,
-        venue,
-        status,
-        team1_score,
-        team2_score,
-        winner_team_id,
-        match_duration,
-        created_at,
-        updated_at,
-        round_number,
-        match_number,
-        created_by,
-        team1:teams!matches_team1_id_fkey(name),
-        team2:teams!matches_team2_id_fkey(name),
-        division:divisions(name),
-        league:leagues(name)
-      `)
-      .eq('league_id', leagueId)
-      .order('scheduled_date', { ascending: true });
-
-    if (matchesError) throw matchesError;
-      // Fetch match confirmations
-      // Use 'as any' to bypass type issues with Supabase client
-      const supabaseAny = supabase as any;
-      const { data: confirmations, error: confirmError } = await supabaseAny
-        .from('match_confirmations')
-        .select(`
-          id,
-          match_id,
-          team_id,
-          status,
-          reschedule_reason,
-          match:matches!inner (
-            id,
-            scheduled_date,
-            scheduled_time,
-            venue,
-            league_id,
-            team1:teams!matches_team1_id_fkey(name),
-            team2:teams!matches_team2_id_fkey(name),
-            division:divisions(name)
-          ),
-          team:teams(name)
-        `)
-        .eq('match.league_id', leagueId)
-        .neq('status', 'confirmed');
-
-      if (confirmError) throw confirmError;
-
-      // Categorize matches
-      const allMatchesData = matches || [];
-      const upcoming = allMatchesData.filter(match => 
-        match.status === 'confirmed' && !match.team1_score && !match.team2_score
-      );
-      const completed = allMatchesData.filter(match => 
-        match.status === 'completed' || match.team1_score !== null || match.team2_score !== null
-      );
-
-      setAdminMatches(allMatchesData);
-      setUpcomingMatchesAdmin(upcoming);
-      setCompletedMatchesAdmin(completed);
-      setPendingConfirmationsAdmin(confirmations || []);
-      
-      
-    } catch (error) {
-      console.error('Error fetching admin matches:', error);
-  
+      toast({
+        title: 'Error',
+        description: 'Failed to clear matches. Please try again.',
+        variant: 'destructive'
+      });
     }
   };
 
-  
-
-  const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this league? This action cannot be undone.')) {
-      return;
-    }
+  // Schedule all generated matches with the same date, time, and venue
+  const handleBulkScheduleSubmit = async () => {
+    if (generatedMatches.length === 0 || !bulkScheduleFormData.date) return;
 
     try {
-      const { error } = await supabase
-        .from('leagues')
-        .delete()
-        .eq('id', leagueId);
+      // Prepare the matches for insertion
+      const matchesToInsert = generatedMatches.map(match => ({
+        league_id: leagueId,
+        division_id: match.divisionId,
+        team1_id: match.team1Id,
+        team2_id: match.team2Id,
+        scheduled_date: bulkScheduleFormData.date,
+        scheduled_time: bulkScheduleFormData.time || null,
+        venue: bulkScheduleFormData.venue || null,
+        status: 'pending', // Always set to pending for player approval
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+
+      // Insert all matches at once and get the inserted records
+      const { data: insertedMatches, error } = await supabase
+        .from('matches')
+        .insert(matchesToInsert)
+        .select();
 
       if (error) throw error;
 
-      navigate('/leagues');
-    } catch (err: any) {
-      console.error('Error deleting league:', err);
-      setError('Failed to delete league');
+      // Create match confirmations for each team in each match
+      if (insertedMatches && insertedMatches.length > 0) {
+        console.log('Creating match confirmations for inserted matches:', insertedMatches);
+
+        // Prepare confirmations for all teams
+        const confirmations = [];
+        for (const match of insertedMatches) {
+          // Add confirmation for team 1
+          confirmations.push({
+            match_id: match.id,
+            team_id: match.team1_id,
+            status: 'pending',
+            created_at: new Date().toISOString()
+          });
+
+          // Add confirmation for team 2
+          confirmations.push({
+            match_id: match.id,
+            team_id: match.team2_id,
+            status: 'pending',
+            created_at: new Date().toISOString()
+          });
+        }
+
+        // Insert all confirmations
+        const { error: confirmationError } = await supabase
+          .from('match_confirmations')
+          .insert(confirmations);
+
+        if (confirmationError) {
+          console.error('Error creating match confirmations:', confirmationError);
+          toast({
+            title: 'Warning',
+            description: 'Matches created but player confirmations may not have been set up correctly.',
+            variant: 'destructive'
+          });
+        } else {
+          console.log('✅ Successfully created match confirmations for all teams');
+        }
+      }
+
+      toast({
+        title: 'Success',
+        description: `${matchesToInsert.length} matches have been scheduled and are pending player approval.`,
+        variant: 'default'
+      });
+
+      // Reset and close dialog
+      setGeneratedMatches([]);
+      setBulkScheduleFormData({
+        date: '',
+        time: '',
+        venue: '',
+        status: 'pending'
+      });
+      setIsBulkScheduleDialogOpen(false);
+
+      // Refresh matches list
+      fetchMatches();
+    } catch (error) {
+      console.error('Error scheduling matches:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to schedule matches. Please try again.',
+        variant: 'destructive'
+      });
     }
   };
 
   if (loading) {
-
     return (
       <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
         <Header />
         <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center py-8">
+          <div className="flex items-center justify-center py-16">
             <div className="text-center">
               <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-lg text-muted-foreground">Loading league details...</p>
+              <p className="text-lg text-muted-foreground">Loading league information...</p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-      );
+    );
   }
 
   if (!league) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
         <Header />
-        <div className="container mx-auto px-4 py-8 text-center">
-          <h2 className="text-2xl font-bold text-red-600 mb-4">League Not Found</h2>
-          <p className="text-muted-foreground mb-4">The league you're looking for doesn't exist or you don't have permission to manage it.</p>
-          <Button onClick={() => navigate('/leagues')}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Leagues
-          </Button>
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-center py-16">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold mb-4">League Not Found</h2>
+              <p className="text-muted-foreground mb-6">
+                The league you're looking for doesn't exist or you don't have permission to view it.
+              </p>
+              <Link to="/">
+                <Button>Return to Home</Button>
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -975,923 +1501,1552 @@ useEffect(() => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
       <Header />
-      
-      <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        <div className="max-w-none lg:max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6 sm:mb-8">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => navigate('/leagues')}
-              className="w-fit"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Back to Leagues</span>
-              <span className="sm:hidden">Back</span>
-            </Button>
-            
-            <div className="flex-1 min-w-0">
-              <h2 className="text-2xl sm:text-3xl font-bold truncate">Manage League</h2>
+
+      <div className="container mx-auto px-4 py-8">
+        {/* Header Section */}
+        <div className="mb-8">
+          <div className="flex items-center gap-4 mb-4">
+            <Link to="/leagues">
+              <Button variant="outline" size="sm">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Leagues
+              </Button>
+            </Link>
+            <div>
+              <h2 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+                <Settings className="w-6 h-6 sm:w-8 sm:h-8" />
+                Manage League
+              </h2>
               <p className="text-sm sm:text-base text-muted-foreground">
-                Update league settings and monitor progress
+                Configure and manage {league.name}
               </p>
             </div>
-            
-            <Badge className={`text-xs sm:text-sm whitespace-nowrap ${
-              formData.status === 'draft' ? 'bg-gray-100 text-gray-800' :
-              formData.status === 'registration_open' ? 'bg-green-100 text-green-800' :
-              formData.status === 'active' ? 'bg-blue-100 text-blue-800' :
-              'bg-purple-100 text-purple-800'
-            }`}>
-              <span className="hidden sm:inline">
-                {formData.status === 'registration_open' ? 'Open for Registration' : 
-                formData.status.charAt(0).toUpperCase() + formData.status.slice(1)}
-              </span>
-              <span className="sm:hidden">
-                {formData.status === 'registration_open' ? 'Open' : 
-                formData.status.charAt(0).toUpperCase() + formData.status.slice(1)}
-              </span>
-            </Badge>
           </div>
+
+          <Card className="mb-6">
+            <CardContent className="pt-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold">{league.name}</h3>
+                  {league.description && (
+                    <p className="text-muted-foreground text-sm mt-1">
+                      {league.description}
+                    </p>
+                  )}
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Season: {formatDate(league.start_date)} - {formatDate(league.end_date)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-yellow-500" />
+                  <span className="text-sm font-medium">
+                    {league.status === 'active' ? 'Active Season' :
+                      league.status === 'upcoming' ? 'Upcoming Season' :
+                        'Season Ended'}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-    </div>
 
-        {/* Messages */}
-        {error && (
-          <Alert className="mb-6 border-red-200 bg-red-50">
-            <AlertDescription className="text-red-700">{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {success && (
-          <Alert className="mb-6 border-green-200 bg-green-50">
-            <AlertDescription className="text-green-700">{success}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Tabs */}
-        <Tabs defaultValue="details" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">  {/* Changed from grid-cols-4 to grid-cols-5 */}
-            <TabsTrigger value="details" className="flex items-center gap-2">
-              <Settings className="w-4 h-4" />
-              Details
-            </TabsTrigger>
+        {/* Tabs Navigation */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="grid grid-cols-4 w-full max-w-md mx-auto">
             <TabsTrigger value="teams" className="flex items-center gap-2">
               <Users className="w-4 h-4" />
-              Teams
+              <span className="hidden sm:inline">Teams</span>
             </TabsTrigger>
             <TabsTrigger value="matches" className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
-              Matches
+              <span className="hidden sm:inline">Matches</span>
             </TabsTrigger>
             <TabsTrigger value="leaderboard" className="flex items-center gap-2">
               <Trophy className="w-4 h-4" />
-              Leaderboard
+              <span className="hidden sm:inline">Standings</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Settings className="w-4 h-4" />
-              Settings
+              <span className="hidden sm:inline">Settings</span>
             </TabsTrigger>
           </TabsList>
 
-            {/* League Details Tab */}
-            <TabsContent value="details" className="space-y-6">
-              <Card>
-      <CardHeader>
-        <CardTitle className="text-lg sm:text-xl">League Information</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="name" className="text-sm font-medium">League Name *</Label>
-            <Input
-              id="name"
-              value={formData.name}
-              onChange={(e) => handleInputChange('name', e.target.value)}
-              placeholder="Enter league name"
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label htmlFor="status" className="text-sm font-medium">Status</Label>
-            <Select 
-              value={formData.status} 
-              onValueChange={(value) => handleInputChange('status', value)}
-            >
-              <SelectTrigger className="mt-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="registration_open">Open for Registration</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div>
-          <Label htmlFor="description" className="text-sm font-medium">Description</Label>
-          <Textarea
-            id="description"
-            value={formData.description}
-            onChange={(e) => handleInputChange('description', e.target.value)}
-            placeholder="League description..."
-            rows={3}
-            className="mt-1 resize-none"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="start_date" className="text-sm font-medium">Start Date *</Label>
-            <Input
-              id="start_date"
-              type="date"
-              value={formData.start_date}
-              onChange={(e) => handleInputChange('start_date', e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label htmlFor="end_date" className="text-sm font-medium">End Date *</Label>
-            <Input
-              id="end_date"
-              type="date"
-              value={formData.end_date}
-              onChange={(e) => handleInputChange('end_date', e.target.value)}
-              className="mt-1"
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-200">
-          <Button 
-            onClick={handleSave} 
-            disabled={saving || !formData.name}
-            className="w-full sm:w-auto"
-          >
-            {saving ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4 mr-2" />
-                Save Changes
-              </>
-            )}
-          </Button>
-        </div>
-      </CardContent>
-          </Card>
-            </TabsContent>
-
-            {/* Teams Tab */}
-            <TabsContent value="teams" className="space-y-6">
-              {registrationMessage && (
-                <Alert className={`${registrationMessage.includes('Failed') ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
-                  <AlertDescription className={registrationMessage.includes('Failed') ? 'text-red-700' : 'text-green-700'}>
-                    {registrationMessage}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {/* Division Overview with Fixture Generation */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5" />
-                    Teams & Divisions Overview
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {divisions.length === 0 ? (
-                    <div className="text-center py-8">
-                      <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                      <h3 className="font-semibold mb-2">No Divisions Created</h3>
-                      <p className="text-muted-foreground mb-4">
-                        Create divisions to organize teams by skill level.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      {divisions.map((division: Division) => {
-                        const divisionTeams = teamRegistrations.filter(reg => reg.division_id === division.id);
-                        const approvedTeams = divisionTeams.filter(reg => reg.status === 'approved');
-                        const divisionFixtures = fixtures.filter(match => match.division_id === division.id);
-                        
-                        return (
-                          <Card key={division.id} className="border-l-4 border-l-blue-500">
-                            <CardHeader className="pb-3">
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <CardTitle className="text-lg">{division.name}</CardTitle>
-                                  <p className="text-sm text-muted-foreground">
-                                    Level {division.level} • {approvedTeams.length} approved teams • {divisionFixtures.length} matches
-                                  </p>
-                                </div>
-                                <div className="flex gap-2">
-                                  {divisionFixtures.length === 0 && approvedTeams.length >= 2 && (
-                                    <Button 
-                                      size="sm" 
-                                      onClick={() => generateFixtures(division.id)}
-                                      disabled={generatingFixtures}
-                                      className="bg-green-600 hover:bg-green-700"
-                                    >
-                                      {generatingFixtures ? (
-                                        <>
-                                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                                          Generating...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Plus className="w-4 h-4 mr-2" />
-                                          Generate Fixtures
-                                        </>
-                                      )}
-                                    </Button>
-                                  )}
-                                  {divisionFixtures.length > 0 && (
-                                    <Button size="sm" variant="outline">
-                                      <Calendar className="w-4 h-4 mr-2" />
-                                      {divisionFixtures.length} Fixtures Created
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                            </CardHeader>
-                            <CardContent>
-                              {divisionTeams.length === 0 ? (
-                                <p className="text-muted-foreground text-sm">No teams registered for this division yet.</p>
-                              ) : (
-                                <div className="space-y-3">
-                                  <h4 className="font-medium text-sm">Registered Teams:</h4>
-                                  <div className="grid gap-2">
-                                    {divisionTeams.map((registration) => (
-                                      <div key={registration.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                        <div className="flex items-center gap-3">
-                                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                            <Users className="w-4 h-4 text-blue-600" />
-                                          </div>
-                                          <div>
-                                            <div className="font-medium">{registration.team?.name}</div>
-                                            <div className="text-sm text-muted-foreground">
-                                              {registration.team?.player1?.full_name} & {registration.team?.player2?.full_name || 'Pending'}
-                                            </div>
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <Badge className={`${
-                                            registration.status === 'approved' ? 'bg-green-100 text-green-800' :
-                                            registration.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                            'bg-red-100 text-red-800'
-                                          }`}>
-                                            {registration.status}
-                                          </Badge>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {loadingRegistrations ? (
-                <Card>
-                  <CardContent className="flex items-center justify-center py-8">
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                      <span>Loading team registrations...</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <>
-                  {/* Pending Registrations */}
-                  {teamRegistrations.filter(reg => reg.status === 'pending').length > 0 && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <Clock className="w-5 h-5 text-yellow-500" />
-                          Pending Registrations ({teamRegistrations.filter(reg => reg.status === 'pending').length})
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          {teamRegistrations
-                            .filter(reg => reg.status === 'pending')
-                            .map((registration) => (
-                              <div key={registration.id} className="border rounded-lg p-4 bg-yellow-50">
-                                <div className="flex justify-between items-start">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <Users className="w-4 h-4 text-primary" />
-                                      <h4 className="font-semibold">{registration.team.name}</h4>
-                                      <Badge variant="outline" className="text-xs">
-                                        {registration.division.name}
-                                      </Badge>
-                                    </div>
-                                    
-                                    <div className="grid md:grid-cols-2 gap-3">
-                                      <div className="flex items-center gap-2">
-                                        <User className="w-3 h-3 text-muted-foreground" />
-                                        <div>
-                                          <p className="text-sm font-medium">{registration.team.player1.full_name}</p>
-                                          <p className="text-xs text-muted-foreground">{registration.team.player1.email}</p>
-                                        </div>
-                                      </div>
-                                      
-                                      {registration.team.player2 ? (
-                                        <div className="flex items-center gap-2">
-                                          <User className="w-3 h-3 text-muted-foreground" />
-                                          <div>
-                                            <p className="text-sm font-medium">{registration.team.player2.full_name}</p>
-                                            <p className="text-xs text-muted-foreground">{registration.team.player2.email}</p>
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center gap-2">
-                                          <Mail className="w-3 h-3 text-muted-foreground" />
-                                          <p className="text-sm text-muted-foreground">Waiting for partner...</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                    
-                                    <p className="text-xs text-muted-foreground mt-2">
-                                      Registered: {registration.registered_at ? new Date(registration.registered_at).toLocaleDateString() : 'Unknown'}
-                                    </p>
-                                  </div>
-                                  
-                                  <div className="flex gap-2 ml-4">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleRegistrationAction(registration.id, 'reject')}
-                                      disabled={processingRegistration === registration.id || !registration.team.player2}
-                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    >
-                                      {processingRegistration === registration.id ? (
-                                        <div className="w-3 h-3 border border-red-600 border-t-transparent rounded-full animate-spin mr-1"></div>
-                                      ) : (
-                                        <XCircle className="w-3 h-3 mr-1" />
-                                      )}
-                                      Reject
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleRegistrationAction(registration.id, 'approve')}
-                                      disabled={processingRegistration === registration.id || !registration.team.player2}
-                                      className="bg-green-600 hover:bg-green-700 text-white"
-                                    >
-                                      {processingRegistration === registration.id ? (
-                                        <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin mr-1"></div>
-                                      ) : (
-                                        <CheckCircle className="w-3 h-3 mr-1" />
-                                      )}
-                                      Approve
-                                    </Button>
-                                  </div>
-                                </div>
-                                
-                                {!registration.team.player2 && (
-                                  <div className="mt-3 p-2 bg-yellow-100 rounded text-xs text-yellow-700">
-                                    ⚠️ Team is incomplete - waiting for second player to accept invitation
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                 {/* No Registrations */}
-                  {teamRegistrations.length === 0 && (
-                    <Card>
-                      <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                        <Users className="w-16 h-16 text-muted-foreground mb-4" />
-                        <h3 className="text-xl font-semibold mb-2">No Team Registrations Yet</h3>
-                        <p className="text-muted-foreground mb-4">
-                          Teams will appear here once they register for this league.
-                        </p>
-                        <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                          💡 Make sure your league status is "Open for Registration" to allow teams to join
-                        </div>
-                      </CardContent>
-                    </Card>                    
-                  )}
-                    <Card className="mt-6">
-                      <CardHeader>
-                        <CardTitle>Match Fixtures Management</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div className="flex gap-3">
-                          <Button 
-                            onClick={handleGenerateFixtures}
-                            disabled={isGeneratingFixtures || isClearingMatches}
-                            className="flex-1"
-                          >
-                            {isGeneratingFixtures ? 'Generating...' : 'Generate Round-Robin Fixtures'}
-                          </Button>
-                          
-                          {fixtures.length > 0 && (
-                            <Button 
-                              onClick={handleClearMatches}
-                              disabled={isGeneratingFixtures || isClearingMatches}
-                              variant="destructive"
-                              className="flex-1"
-                            >
-                              {isClearingMatches ? 'Clearing...' : 'Clear All Matches'}
-                            </Button>
-                          )}
-                        </div>
-                        
-                        <p className="text-sm text-muted-foreground">
-                          Generate creates matches for all approved teams. Clear removes all existing matches.
-                        </p>
-                        
-                        {fixtures.length > 0 && (
-                          <div className="bg-blue-50 p-3 rounded-lg">
-                            <p className="text-sm text-blue-700">
-                              ✅ {fixtures.length} matches currently generated
-                            </p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                </>
-              )}
-            </TabsContent>
-
-            {/* Matches Tab */}
-        <TabsContent value="matches">
+          {/* Teams Tab */}
+          <TabsContent value="teams" className="space-y-6">
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="w-5 h-5" />
+                  Team Management
+                </CardTitle>
+                <Button onClick={handleAddClick} className="bg-green-600 hover:bg-green-700">
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Add Team
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {teams.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="font-semibold mb-2">No Teams Yet</h3>
+                    <p className="text-muted-foreground mb-6">
+                      Add teams to this league to get started.
+                    </p>
+                    <Button onClick={handleAddClick}>
+                      <UserPlus className="w-4 h-4 mr-2" />
+                      Add First Team
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Team Name</TableHead>
+                          <TableHead>Players</TableHead>
+                          <TableHead>Division</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {teams.map((team) => (
+                          <TableRow key={team.id}>
+                            <TableCell className="font-medium">{team.name}</TableCell>
+                            <TableCell>
+                              <div className="space-y-1">
+                                <div>{team.player1.full_name}</div>
+                                {team.player2 && <div>{team.player2.full_name}</div>}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {team.division ? (
+                                <Badge variant="outline">{team.division.name}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">Not assigned</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleEditClick(team)}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                  <span className="sr-only">Edit</span>
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-destructive hover:bg-destructive/10"
+                                  onClick={() => handleDeleteClick(team)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  <span className="sr-only">Delete</span>
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                {/* Edit Team Dialog */}
+                <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Edit Team</DialogTitle>
+                      <DialogDescription>
+                        Update team information and division assignment.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="team-name">Team Name</Label>
+                        <Input
+                          id="team-name"
+                          value={editFormData.name}
+                          onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                          placeholder="Enter team name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="player1">Player 1</Label>
+                        <Select
+                          value={editFormData.player1Id}
+                          onValueChange={(value) => setEditFormData({ ...editFormData, player1Id: value })}
+                        >
+                          <SelectTrigger id="player1">
+                            <SelectValue placeholder="Select player 1" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {profiles.map((profile) => (
+                              <SelectItem key={profile.id} value={profile.id}>
+                                {profile.full_name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="player2">Player 2 (Optional)</Label>
+                        <Select
+                          value={editFormData.player2Id}
+                          onValueChange={(value) => setEditFormData({ ...editFormData, player2Id: value })}
+                        >
+                          <SelectTrigger id="player2">
+                            <SelectValue placeholder="Select player 2 (optional)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            {profiles.map((profile) => (
+                              <SelectItem key={profile.id} value={profile.id}>
+                                {profile.full_name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="division">Division</Label>
+                        <Select
+                          value={editFormData.divisionId}
+                          onValueChange={(value) => setEditFormData({ ...editFormData, divisionId: value })}
+                        >
+                          <SelectTrigger id="division">
+                            <SelectValue placeholder="Select division" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {divisions.map((division) => (
+                              <SelectItem key={division.id} value={division.id}>
+                                {division.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleEditSubmit}>Save Changes</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Delete Team Dialog */}
+                <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2 text-destructive">
+                        <AlertCircle className="w-5 h-5" />
+                        Delete Team
+                      </DialogTitle>
+                      <DialogDescription>
+                        This action cannot be undone. This will permanently delete the team
+                        and remove all associated data.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="confirm" className="text-destructive">
+                          Type <span className="font-semibold">{selectedTeam?.name}</span> to confirm
+                        </Label>
+                        <Input
+                          id="confirm"
+                          value={deleteConfirmation}
+                          onChange={(e) => setDeleteConfirmation(e.target.value)}
+                          placeholder={`Type "${selectedTeam?.name}" to confirm`}
+                          className="border-destructive"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={handleDeleteSubmit}
+                        disabled={deleteConfirmation !== selectedTeam?.name}
+                      >
+                        Delete Team
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Add Team Dialog */}
+                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Add New Team</DialogTitle>
+                      <DialogDescription>
+                        Create a new team and assign it to a division.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="new-team-name">Team Name</Label>
+                        <Input
+                          id="new-team-name"
+                          value={addFormData.name}
+                          onChange={(e) => setAddFormData({ ...addFormData, name: e.target.value })}
+                          placeholder="Enter team name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="new-player1">Player 1</Label>
+                        <Select
+                          value={addFormData.player1Id}
+                          onValueChange={(value) => setAddFormData({ ...addFormData, player1Id: value })}
+                        >
+                          <SelectTrigger id="new-player1">
+                            <SelectValue placeholder="Select player 1" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {profiles.map((profile) => (
+                              <SelectItem key={profile.id} value={profile.id}>
+                                {profile.full_name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="new-player2">Player 2 (Optional)</Label>
+                        <Select
+                          value={addFormData.player2Id}
+                          onValueChange={(value) => setAddFormData({ ...addFormData, player2Id: value })}
+                        >
+                          <SelectTrigger id="new-player2">
+                            <SelectValue placeholder="Select player 2 (optional)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            {profiles.map((profile) => (
+                              <SelectItem key={profile.id} value={profile.id}>
+                                {profile.full_name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="new-division">Division</Label>
+                        <Select
+                          value={addFormData.divisionId}
+                          onValueChange={(value) => setAddFormData({ ...addFormData, divisionId: value })}
+                        >
+                          <SelectTrigger id="new-division">
+                            <SelectValue placeholder="Select division" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {divisions.map((division) => (
+                              <SelectItem key={division.id} value={division.id}>
+                                {division.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleAddSubmit}
+                        disabled={!addFormData.name || !addFormData.player1Id || !addFormData.divisionId}
+                      >
+                        Add Team
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Matches Tab */}
+          <TabsContent value="matches" className="space-y-6">
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="w-5 h-5" />
                   Match Management
                 </CardTitle>
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                  <Button
+                    onClick={() => setIsCreateMatchDialogOpen(true)}
+                    className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none"
+                  >
+                    <Calendar className="w-4 h-4 mr-2" />
+                    <span className="whitespace-nowrap">Create Match</span>
+                  </Button>
+                  <Button
+                    onClick={() => setIsGenerateMatchesDialogOpen(true)}
+                    className="bg-blue-600 hover:bg-blue-700 flex-1 sm:flex-none"
+                  >
+                    <Users className="w-4 h-4 mr-2" />
+                    <span className="whitespace-nowrap sm:inline">Generate Matches</span>
+                  </Button>
+                  <Button
+                    onClick={() => setIsClearMatchesDialogOpen(true)}
+                    className="bg-red-600 hover:bg-red-700 flex-1 sm:flex-none"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    <span className="whitespace-nowrap">Clear All</span>
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="pending-admin" className="space-y-6">
-                  <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="pending-admin" className="flex items-center gap-2">
-                      <XCircle className="w-4 h-4" />
-                      Pending Confirmations
-                      {pendingConfirmationsAdmin.length > 0 && (
-                        <Badge variant="destructive" className="ml-1 px-1.5 py-0.5 text-xs">
-                          {pendingConfirmationsAdmin.length}
-                        </Badge>
-                      )}
-                    </TabsTrigger>
-                    <TabsTrigger value="upcoming-admin" className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      Upcoming
-                      {upcomingMatchesAdmin.length > 0 && (
-                        <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs">
-                          {upcomingMatchesAdmin.length}
-                        </Badge>
-                      )}
-                    </TabsTrigger>
-                    <TabsTrigger value="completed-admin" className="flex items-center gap-2">
-                      <Trophy className="w-4 h-4" />
-                      Completed
-                    </TabsTrigger>
-                    <TabsTrigger value="all-admin" className="flex items-center gap-2">
-                      All Matches
-                    </TabsTrigger>
-                  </TabsList>
+                {matches.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="font-semibold mb-2">No Matches Yet</h3>
+                    <p className="text-muted-foreground mb-6">
+                      Create matches between teams to get started.
+                    </p>
+                    <Button onClick={() => setIsCreateMatchDialogOpen(true)}>
+                      <Calendar className="w-4 h-4 mr-2" />
+                      Create First Match
+                    </Button>
+                  </div>
+                ) : (
+                  <div>
+                    {/* Division Filter */}
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-3">
+                      <div className="text-sm font-medium">
+                        {filteredMatches.length} {filteredMatches.length === 1 ? 'match' : 'matches'} found
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="divisionFilter" className="text-sm whitespace-nowrap">
+                          Filter by Division:
+                        </Label>
+                        <Select
+                          value={selectedMatchDivision}
+                          onValueChange={setSelectedMatchDivision}
+                        >
+                          <SelectTrigger id="divisionFilter" className="w-full sm:w-[180px]">
+                            <SelectValue placeholder="All Divisions" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Divisions</SelectItem>
+                            {divisions.map((division) => (
+                              <SelectItem key={division.id} value={division.id}>
+                                {division.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
 
-                  {/* Pending Confirmations Tab */}
-                    <TabsContent value="pending-admin">
-                      {adminMatches.filter(match => 
-                        (match.status === 'scheduled' && (!match.scheduled_date || !match.scheduled_time)) ||
-                        pendingConfirmationsAdmin.some(conf => conf.match_id === match.id)
-                      ).length === 0 ? (
-                          <div className="text-center py-8">
-                            <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-4" />
-                            <h3 className="font-semibold mb-2">All Matches Scheduled</h3>
-                            <p className="text-muted-foreground">
-                              No matches need scheduling or confirmation
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="space-y-4">
-                            {adminMatches
-                              .filter(match => 
-                                (match.status === 'scheduled' && (!match.scheduled_date || !match.scheduled_time)) ||
-                                pendingConfirmationsAdmin.some(conf => conf.match_id === match.id)
-                              )
-                              .map((match) => {
-                                const needsScheduling = !match.scheduled_date || !match.scheduled_time;
-                                const pendingConfirmation = pendingConfirmationsAdmin.find(conf => conf.match_id === match.id);
-                                
-                                return (
-                                  <Card key={match.id} className={`border-l-4 ${needsScheduling ? 'border-l-orange-500' : 'border-l-yellow-500'}`}>
-                                    <CardContent className="p-4 sm:p-6">
-                                      <div className="space-y-4">
-                                        {/* Match Header */}
-                                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                                          <div className="flex-1 min-w-0">
-                                            <h4 className="text-base sm:text-lg font-semibold truncate">
-                                              {match.team1.name} vs {match.team2.name}
-                                            </h4>
-                                            <p className="text-sm text-muted-foreground">
-                                              {match.division?.name || 'Unknown Division'} • 
-                                              {needsScheduling ? ' Needs Scheduling' : ` Waiting for: ${pendingConfirmation?.team?.name || 'Team'} Confirmation`}
-                                            </p>
-                                          </div>
-                                          <Badge className={`text-xs whitespace-nowrap ${
-                                            needsScheduling ? 'bg-orange-100 text-orange-800' : 'bg-yellow-100 text-yellow-800'
-                                          }`}>
-                                            {needsScheduling ? 'Needs Scheduling' : 'Pending Confirmation'}
-                                          </Badge>
-                                        </div>
+                    {/* Match Status Tabs */}
+                    <Tabs value={matchesActiveTab} onValueChange={setMatchesActiveTab} className="mb-6">
+                      <TabsList className="grid grid-cols-4 w-full max-w-md mb-4">
+                        <TabsTrigger value="all">
+                          All
+                          <Badge variant="secondary" className="ml-2">{filteredMatches.length}</Badge>
+                        </TabsTrigger>
+                        <TabsTrigger value="pending">
+                          Pending
+                          <Badge variant="secondary" className="ml-2">{pendingMatches.length}</Badge>
+                        </TabsTrigger>
+                        <TabsTrigger value="upcoming">
+                          Upcoming
+                          <Badge variant="secondary" className="ml-2">{upcomingMatches.length}</Badge>
+                        </TabsTrigger>
+                        <TabsTrigger value="completed">
+                          Completed
+                          <Badge variant="secondary" className="ml-2">{completedMatches.length}</Badge>
+                        </TabsTrigger>
+                      </TabsList>
 
-                                        {/* Current Schedule (if scheduled) */}
-                                        {!needsScheduling && (
-                                          <div className="bg-blue-50 p-3 rounded-lg">
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-                                              <div className="flex items-center gap-2">
-                                                <Calendar className="w-4 h-4 text-blue-600" />
-                                                <span>{new Date(match.scheduled_date).toLocaleDateString()}</span>
-                                              </div>
-                                              <div className="flex items-center gap-2">
-                                                <Clock className="w-4 h-4 text-blue-600" />
-                                                <span>{match.scheduled_time}</span>
-                                              </div>
-                                              {match.venue && (
-                                                <div className="flex items-center gap-2">
-                                                  <MapPin className="w-4 h-4 text-blue-600" />
-                                                  <span className="truncate">{match.venue}</span>
-                                                </div>
-                                              )}
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        {/* Inline Scheduling/Rescheduling Form */}
-                                        {(needsScheduling || showRescheduleForm === match.id) && (
-                                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-gray-50 p-4 rounded-lg">
-                                            <div>
-                                              <Label htmlFor={`date-${match.id}`} className="text-sm font-medium">
-                                                {needsScheduling ? 'Date *' : 'New Date *'}
-                                              </Label>
-                                              <Input
-                                                id={`date-${match.id}`}
-                                                type="date"
-                                                value={
-                                                  showRescheduleForm === match.id ? rescheduleForm.date :
-                                                  scheduleForm.matchId === match.id ? scheduleForm.date : 
-                                                  (match.scheduled_date || '')
-                                                }
-                                                onChange={(e) => {
-                                                  if (showRescheduleForm === match.id) {
-                                                    setRescheduleForm(prev => ({...prev, date: e.target.value}));
-                                                  } else {
-                                                    setScheduleForm({
-                                                      matchId: match.id,
-                                                      date: e.target.value,
-                                                      time: scheduleForm.matchId === match.id ? scheduleForm.time : (match.scheduled_time || ''),
-                                                      venue: scheduleForm.matchId === match.id ? scheduleForm.venue : (match.venue || '')
-                                                    });
-                                                  }
-                                                }}
-                                                className="mt-1"
-                                              />
-                                            </div>
-                                            <div>
-                                              <Label htmlFor={`time-${match.id}`} className="text-sm font-medium">
-                                                {needsScheduling ? 'Time *' : 'New Time *'}
-                                              </Label>
-                                              <Input
-                                                id={`time-${match.id}`}
-                                                type="time"
-                                                value={
-                                                  showRescheduleForm === match.id ? rescheduleForm.time :
-                                                  scheduleForm.matchId === match.id ? scheduleForm.time : 
-                                                  (match.scheduled_time || '')
-                                                }
-                                                onChange={(e) => {
-                                                  if (showRescheduleForm === match.id) {
-                                                    setRescheduleForm(prev => ({...prev, time: e.target.value}));
-                                                  } else {
-                                                    setScheduleForm({
-                                                      matchId: match.id,
-                                                      date: scheduleForm.matchId === match.id ? scheduleForm.date : (match.scheduled_date || ''),
-                                                      time: e.target.value,
-                                                      venue: scheduleForm.matchId === match.id ? scheduleForm.venue : (match.venue || '')
-                                                    });
-                                                  }
-                                                }}
-                                                className="mt-1"
-                                              />
-                                            </div>
-                                            <div>
-                                              <Label htmlFor={`venue-${match.id}`} className="text-sm font-medium">
-                                                {needsScheduling ? 'Venue (Optional)' : 'New Venue'}
-                                              </Label>
-                                              <Input
-                                                id={`venue-${match.id}`}
-                                                placeholder="Enter venue"
-                                                value={
-                                                  showRescheduleForm === match.id ? rescheduleForm.venue :
-                                                  scheduleForm.matchId === match.id ? scheduleForm.venue : 
-                                                  (match.venue || '')
-                                                }
-                                                onChange={(e) => {
-                                                  if (showRescheduleForm === match.id) {
-                                                    setRescheduleForm(prev => ({...prev, venue: e.target.value}));
-                                                  } else {
-                                                    setScheduleForm({
-                                                      matchId: match.id,
-                                                      date: scheduleForm.matchId === match.id ? scheduleForm.date : (match.scheduled_date || ''),
-                                                      time: scheduleForm.matchId === match.id ? scheduleForm.time : (match.scheduled_time || ''),
-                                                      venue: e.target.value
-                                                    });
-                                                  }
-                                                }}
-                                                className="mt-1"
-                                              />
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        {/* Action Buttons */}
-                                        <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-gray-100">
-                                          {needsScheduling ? (
-                                            // Schedule button for unscheduled matches
-                                            <Button
-                                              onClick={() => handleScheduleMatch(match.id)}
-                                              disabled={
-                                                !scheduleForm.date || !scheduleForm.time || 
-                                                scheduleForm.matchId !== match.id ||
-                                                processing === match.id
-                                              }
-                                              className="bg-blue-600 hover:bg-blue-700 w-full"
-                                            >
-                                              {processing === match.id ? (
-                                                <>
-                                                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                                                  Scheduling...
-                                                </>
-                                              ) : (
-                                                <>
-                                                  <Clock className="w-4 h-4 mr-2" />
-                                                  Schedule Match
-                                                </>
-                                              )}
-                                            </Button>
-                                          ) : showRescheduleForm === match.id ? (
-                                            // Update schedule and cancel buttons when rescheduling
-                                            <>
-                                              <Button
-                                                onClick={() => {
-                                                  handleScheduleMatch(match.id);
-                                                  setShowRescheduleForm(null);
-                                                }}
-                                                disabled={!rescheduleForm.date || !rescheduleForm.time || processing === match.id}
-                                                className="bg-blue-600 hover:bg-blue-700 w-full sm:flex-1"
-                                              >
-                                                <Clock className="w-4 h-4 mr-2" />
-                                                Update Schedule
-                                              </Button>
-                                              <Button
-                                                variant="outline"
-                                                onClick={() => setShowRescheduleForm(null)}
-                                                className="w-full sm:flex-1"
-                                              >
-                                                Cancel
-                                              </Button>
-                                            </>
-                                          ) : (
-                                            // Reschedule button for scheduled matches waiting for confirmation
-                                            <Button
-                                              variant="outline"
-                                              onClick={() => {
-                                                setShowRescheduleForm(match.id);
-                                                setRescheduleForm({ 
-                                                  matchId: match.id, 
-                                                  date: match.scheduled_date || '', 
-                                                  time: match.scheduled_time || '',
-                                                  venue: match.venue || ''
-                                                });
-                                              }}
-                                              disabled={processing === match.id}
-                                              className="w-full"
-                                            >
-                                              <XCircle className="w-4 h-4 mr-2" />
-                                              Reschedule
-                                            </Button>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-                                );
-                              })}
-                          </div>
-                        )}
-                      </TabsContent>
-
-                      {/* Upcoming Matches Tab */}
-                      <TabsContent value="upcoming-admin">
-                        {upcomingMatchesAdmin.length === 0 ? (
-                          <div className="text-center py-8">
-                            <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                            <h3 className="font-semibold mb-2">No Upcoming Matches</h3>
-                            <p className="text-muted-foreground">
-                              Confirmed matches will appear here
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="space-y-4">
-                            {upcomingMatchesAdmin.map((match) => (
-                              <Card key={match.id} className="border-l-4 border-l-blue-500">
-                                <CardContent className="p-4">
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <h4 className="font-semibold">
-                                        {match.team1?.name || 'Unknown Team'} vs {match.team2?.name || 'Unknown Team'}
-                                      </h4>
-                                      <p className="text-sm text-muted-foreground">
-                                        {match.division?.name || 'Unknown Division'} • {match.scheduled_date ? new Date(match.scheduled_date).toLocaleDateString() : 'No date'}
-                                        {match.scheduled_time && ` at ${match.scheduled_time}`}
-                                        {match.venue && ` • ${match.venue}`}
-                                      </p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Badge className="bg-blue-100 text-blue-800">Confirmed</Badge>
-                                      <Button 
-                                        size="sm" 
-                                        variant="outline"
-                                        onClick={() => {
-                                          setSelectedMatchForScoring(match);
-                                          setScoreModalOpen(true);
-                                        }}
-                                      >
-                                        <Trophy className="w-4 h-4 mr-2" />
-                                        Record Result
-                                      </Button>
+                      {/* All Matches Tab */}
+                      <TabsContent value="all">
+                        {/* Mobile view (card-based layout) */}
+                        <div className="grid gap-4 md:hidden">
+                          {filteredMatches.length === 0 ? (
+                            <div className="text-center py-4 text-muted-foreground">
+                              No matches found
+                            </div>
+                          ) : (
+                            filteredMatches.map((match) => (
+                              <div key={match.id} className="bg-card border rounded-lg p-4 shadow-sm">
+                                <div className="flex justify-between items-start mb-3">
+                                  <div>
+                                    <h4 className="font-medium">{match.team1?.name} vs {match.team2?.name}</h4>
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {match.division?.name}
                                     </div>
                                   </div>
-                                </CardContent>
-                              </Card>
-                            ))}
-                          </div>
-                        )}
-                      </TabsContent>
-                
-                  {/* Completed Matches Tab */}
-                  <TabsContent value="completed-admin">
-                    {completedMatchesAdmin.length === 0 ? (
-                      <div className="text-center py-8">
-                        <Trophy className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                        <h3 className="font-semibold mb-2">No Completed Matches</h3>
-                        <p className="text-muted-foreground">
-                          Completed matches will appear here
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {completedMatchesAdmin.map((match) => (
-                          <Card key={match.id} className="border-l-4 border-l-green-500">
-                            <CardContent className="p-4">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <h4 className="font-semibold">
-                                    {match.team1.name} vs {match.team2.name}
-                                  </h4>
-                                  <p className="text-sm text-muted-foreground">
-                                    {match.division.name} • {new Date(match.scheduled_date).toLocaleDateString()}
-                                    {match.scheduled_time && ` at ${match.scheduled_time}`}
-                                    {match.venue && ` • ${match.venue}`}
-                                  </p>
-                                  {match.team1_score !== null && match.team2_score !== null && (
-                                    <p className="text-sm font-medium text-green-700 mt-1">
-                                      Final Score: {match.team1_score} - {match.team2_score}
-                                    </p>
-                                  )}
+                                  <Badge
+                                    variant={
+                                      match.status === 'scheduled' ? 'default' :
+                                        match.status === 'completed' ? 'secondary' :
+                                          match.status === 'pending' ? 'destructive' : 'outline'
+                                    }
+                                    className="capitalize"
+                                  >
+                                    {match.status}
+                                  </Badge>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge className="bg-green-100 text-green-800">Completed</Badge>
-                                  <Button size="sm" variant="outline">
-                                    View Details
+
+                                <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                                  <div>
+                                    <span className="text-muted-foreground">Date:</span>
+                                    <div>{formatDate(match.scheduled_date)}</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Time:</span>
+                                    <div>{match.scheduled_time || 'Not set'}</div>
+                                  </div>
+                                  <div className="col-span-2">
+                                    <span className="text-muted-foreground">Venue:</span>
+                                    <div>{match.venue || 'Not set'}</div>
+                                  </div>
+                                </div>
+
+                                <div className="flex justify-end gap-2 border-t pt-3">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleEditMatchClick(match)}
+                                  >
+                                    <Pencil className="w-4 h-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteMatchClick(match)}
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-1" />
+                                    Delete
                                   </Button>
                                 </div>
                               </div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    )}
-                  </TabsContent>
+                            ))
+                          )}
+                        </div>
 
-                  {/* All Matches Tab */}
-                  <TabsContent value="all-admin">
-                    {adminMatches.length === 0 ? (
-                      <div className="text-center py-8">
-                        <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                        <h3 className="font-semibold mb-2">No Matches Generated</h3>
-                        <p className="text-muted-foreground mb-4">
-                          Generate fixtures in the Teams tab first
-                        </p>
-                        <Button variant="outline" onClick={() => {
-                          const teamsTab = document.querySelector('[value="teams"]') as HTMLElement;
-                          teamsTab?.click();
-                        }}>
-                          <Users className="w-4 h-4 mr-2" />
-                          Go to Teams Tab
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {adminMatches.map((match) => (
-                          <Card key={match.id}>
-                            <CardContent className="p-4">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <h4 className="font-semibold">
-                                    {match.team1.name} vs {match.team2.name}
-                                  </h4>
-                                  <p className="text-sm text-muted-foreground">
-                                    {match.division.name} • {match.scheduled_date ? new Date(match.scheduled_date).toLocaleDateString() : 'Not scheduled'}
-                                    {match.scheduled_time && ` at ${match.scheduled_time}`}
-                                    {match.venue && ` • ${match.venue}`}
-                                  </p>
-                                  {match.team1_score !== null && match.team2_score !== null && (
-                                    <p className="text-sm font-medium text-green-700 mt-1">
-                                      Final Score: {match.team1_score} - {match.team2_score}
-                                    </p>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge className={
-                                    match.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                    match.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
-                                    match.status === 'scheduled' && match.scheduled_date ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-gray-100 text-gray-800'
-                                  }>
-                                    {match.status === 'completed' ? 'Completed' :
-                                    match.status === 'confirmed' ? 'Confirmed' :
-                                    match.status === 'scheduled' && match.scheduled_date ? 'Awaiting Confirmation' :
-                                    'Needs Scheduling'}
+                        {/* Desktop view (table layout) */}
+                        <div className="hidden md:block overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Teams</TableHead>
+                                <TableHead>Date & Time</TableHead>
+                                <TableHead>Venue</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {filteredMatches.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={5} className="text-center py-4">
+                                    No matches found
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                filteredMatches.map((match) => (
+                                  <TableRow key={match.id}>
+                                    <TableCell>
+                                      <div className="font-medium">{match.team1?.name} vs {match.team2?.name}</div>
+                                      <div className="text-xs text-muted-foreground mt-1">
+                                        {match.division?.name}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div>{formatDate(match.scheduled_date)}</div>
+                                      {match.scheduled_time && (
+                                        <div className="text-xs text-muted-foreground">{match.scheduled_time}</div>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {match.venue || <span className="text-muted-foreground text-sm">Not set</span>}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge
+                                        variant={
+                                          match.status === 'scheduled' ? 'default' :
+                                            match.status === 'completed' ? 'secondary' :
+                                              match.status === 'pending' ? 'destructive' : 'outline'
+                                        }
+                                        className="capitalize"
+                                      >
+                                        {match.status}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex justify-end gap-2">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleEditMatchClick(match)}
+                                        >
+                                          <Pencil className="w-4 h-4" />
+                                          <span className="sr-only">Edit</span>
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="text-destructive hover:bg-destructive/10"
+                                          onClick={() => handleDeleteMatchClick(match)}
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                          <span className="sr-only">Delete</span>
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </TabsContent>
+
+                      {/* Pending Matches Tab */}
+                      <TabsContent value="pending">
+                        {/* Mobile view (card-based layout) */}
+                        <div className="grid gap-4 md:hidden">
+                          {pendingMatches.length === 0 ? (
+                            <div className="text-center py-4 text-muted-foreground">
+                              No pending matches found
+                            </div>
+                          ) : (
+                            pendingMatches.map((match) => (
+                              <div key={match.id} className="bg-card border rounded-lg p-4 shadow-sm border-l-4 border-l-destructive">
+                                <div className="flex justify-between items-start mb-3">
+                                  <div>
+                                    <h4 className="font-medium">{match.team1?.name} vs {match.team2?.name}</h4>
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {match.division?.name}
+                                    </div>
+                                  </div>
+                                  <Badge variant="destructive" className="capitalize">
+                                    {match.status}
                                   </Badge>
-                                  {match.status === 'confirmed' && (
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline"
-                                      onClick={() => {
-                                        setSelectedMatchForScoring(match);
-                                        setScoreModalOpen(true);
-                                      }}
-                                    >
-                                      <Trophy className="w-4 h-4 mr-2" />
-                                      Record Result
-                                    </Button>
-                                  )}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                                  <div>
+                                    <span className="text-muted-foreground">Date:</span>
+                                    <div>{formatDate(match.scheduled_date)}</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Time:</span>
+                                    <div>{match.scheduled_time || 'Not set'}</div>
+                                  </div>
+                                  <div className="col-span-2">
+                                    <span className="text-muted-foreground">Venue:</span>
+                                    <div>{match.venue || 'Not set'}</div>
+                                  </div>
+                                </div>
+
+                                <div className="flex justify-end gap-2 border-t pt-3">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleEditMatchClick(match)}
+                                  >
+                                    <Pencil className="w-4 h-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteMatchClick(match)}
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-1" />
+                                    Delete
+                                  </Button>
                                 </div>
                               </div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    )}
-                  </TabsContent>                          
+                            ))
+                          )}
+                        </div>
 
-                </Tabs>
+                        {/* Desktop view (table layout) */}
+                        <div className="hidden md:block overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Teams</TableHead>
+                                <TableHead>Date & Time</TableHead>
+                                <TableHead>Venue</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {pendingMatches.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={5} className="text-center py-4">
+                                    No pending matches found
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                pendingMatches.map((match) => (
+                                  <TableRow key={match.id}>
+                                    <TableCell>
+                                      <div className="font-medium">{match.team1?.name} vs {match.team2?.name}</div>
+                                      <div className="text-xs text-muted-foreground mt-1">
+                                        {match.division?.name}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div>{formatDate(match.scheduled_date)}</div>
+                                      {match.scheduled_time && (
+                                        <div className="text-xs text-muted-foreground">{match.scheduled_time}</div>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {match.venue || <span className="text-muted-foreground text-sm">Not set</span>}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant="destructive" className="capitalize">
+                                        {match.status}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex justify-end gap-2">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleEditMatchClick(match)}
+                                        >
+                                          <Pencil className="w-4 h-4" />
+                                          <span className="sr-only">Edit</span>
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="text-destructive hover:bg-destructive/10"
+                                          onClick={() => handleDeleteMatchClick(match)}
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                          <span className="sr-only">Delete</span>
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </TabsContent>
+
+                      {/* Upcoming Matches Tab */}
+                      <TabsContent value="upcoming">
+                        {/* Mobile view (card-based layout) */}
+                        <div className="grid gap-4 md:hidden">
+                          {upcomingMatches.length === 0 ? (
+                            <div className="text-center py-4 text-muted-foreground">
+                              No upcoming matches found
+                            </div>
+                          ) : (
+                            upcomingMatches.map((match) => (
+                              <div key={match.id} className="bg-card border rounded-lg p-4 shadow-sm border-l-4 border-l-blue-500">
+                                <div className="flex justify-between items-start mb-3">
+                                  <div>
+                                    <h4 className="font-medium">{match.team1?.name} vs {match.team2?.name}</h4>
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {match.division?.name}
+                                    </div>
+                                  </div>
+                                  <Badge variant="default" className="capitalize">
+                                    {match.status}
+                                  </Badge>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                                  <div>
+                                    <span className="text-muted-foreground">Date:</span>
+                                    <div>{formatDate(match.scheduled_date)}</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Time:</span>
+                                    <div>{match.scheduled_time || 'Not set'}</div>
+                                  </div>
+                                  <div className="col-span-2">
+                                    <span className="text-muted-foreground">Venue:</span>
+                                    <div>{match.venue || 'Not set'}</div>
+                                  </div>
+                                </div>
+
+                                <div className="flex justify-end gap-2 border-t pt-3">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleEditMatchClick(match)}
+                                  >
+                                    <Pencil className="w-4 h-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteMatchClick(match)}
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-1" />
+                                    Delete
+                                  </Button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        {/* Desktop view (table layout) */}
+                        <div className="hidden md:block overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Teams</TableHead>
+                                <TableHead>Date & Time</TableHead>
+                                <TableHead>Venue</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {upcomingMatches.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={5} className="text-center py-4">
+                                    No upcoming matches found
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                upcomingMatches.map((match) => (
+                                  <TableRow key={match.id}>
+                                    <TableCell>
+                                      <div className="font-medium">{match.team1?.name} vs {match.team2?.name}</div>
+                                      <div className="text-xs text-muted-foreground mt-1">
+                                        {match.division?.name}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div>{formatDate(match.scheduled_date)}</div>
+                                      {match.scheduled_time && (
+                                        <div className="text-xs text-muted-foreground">{match.scheduled_time}</div>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {match.venue || <span className="text-muted-foreground text-sm">Not set</span>}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant="default" className="capitalize">
+                                        {match.status}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex justify-end gap-2">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleEditMatchClick(match)}
+                                        >
+                                          <Pencil className="w-4 h-4" />
+                                          <span className="sr-only">Edit</span>
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="text-destructive hover:bg-destructive/10"
+                                          onClick={() => handleDeleteMatchClick(match)}
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                          <span className="sr-only">Delete</span>
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </TabsContent>
+
+                      {/* Completed Matches Tab */}
+                      <TabsContent value="completed">
+                        {/* Mobile view (card-based layout) */}
+                        <div className="grid gap-4 md:hidden">
+                          {completedMatches.length === 0 ? (
+                            <div className="text-center py-4 text-muted-foreground">
+                              No completed matches found
+                            </div>
+                          ) : (
+                            completedMatches.map((match) => (
+                              <div key={match.id} className="bg-card border rounded-lg p-4 shadow-sm border-l-4 border-l-green-500">
+                                <div className="flex justify-between items-start mb-3">
+                                  <div>
+                                    <h4 className="font-medium">{match.team1?.name} vs {match.team2?.name}</h4>
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {match.division?.name}
+                                    </div>
+                                  </div>
+                                  <Badge variant="secondary" className="capitalize">
+                                    {match.status}
+                                  </Badge>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                                  <div>
+                                    <span className="text-muted-foreground">Date:</span>
+                                    <div>{formatDate(match.scheduled_date)}</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Time:</span>
+                                    <div>{match.scheduled_time || 'Not set'}</div>
+                                  </div>
+                                  <div className="col-span-2">
+                                    <span className="text-muted-foreground">Venue:</span>
+                                    <div>{match.venue || 'Not set'}</div>
+                                  </div>
+                                </div>
+
+                                <div className="flex justify-end gap-2 border-t pt-3">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleEditMatchClick(match)}
+                                  >
+                                    <Pencil className="w-4 h-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteMatchClick(match)}
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-1" />
+                                    Delete
+                                  </Button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        {/* Desktop view (table layout) */}
+                        <div className="hidden md:block overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Teams</TableHead>
+                                <TableHead>Date & Time</TableHead>
+                                <TableHead>Venue</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {completedMatches.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={5} className="text-center py-4">
+                                    No completed matches found
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                completedMatches.map((match) => (
+                                  <TableRow key={match.id}>
+                                    <TableCell>
+                                      <div className="font-medium">{match.team1?.name} vs {match.team2?.name}</div>
+                                      <div className="text-xs text-muted-foreground mt-1">
+                                        {match.division?.name}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div>{formatDate(match.scheduled_date)}</div>
+                                      {match.scheduled_time && (
+                                        <div className="text-xs text-muted-foreground">{match.scheduled_time}</div>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {match.venue || <span className="text-muted-foreground text-sm">Not set</span>}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant="secondary" className="capitalize">
+                                        {match.status}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex justify-end gap-2">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleEditMatchClick(match)}
+                                        >
+                                          <Pencil className="w-4 h-4" />
+                                          <span className="sr-only">Edit</span>
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="text-destructive hover:bg-destructive/10"
+                                          onClick={() => handleDeleteMatchClick(match)}
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                          <span className="sr-only">Delete</span>
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </TabsContent>
+                    </Tabs>
+                  </div>
+                )}
+
+                {/* Create Match Dialog */}
+                <Dialog open={isCreateMatchDialogOpen} onOpenChange={setIsCreateMatchDialogOpen}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Create New Match</DialogTitle>
+                      <DialogDescription>
+                        Schedule a match between two teams.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="division">Division</Label>
+                        <Select
+                          value={matchFormData.divisionId}
+                          onValueChange={(value) => {
+                            setMatchFormData({
+                              ...matchFormData,
+                              divisionId: value,
+                              team1Id: '',
+                              team2Id: ''
+                            });
+                            // Filter teams by selected division
+                            const divisionTeams = teams.filter(team =>
+                              team.division?.id === value
+                            );
+                            setFilteredTeams(divisionTeams);
+                          }}
+                        >
+                          <SelectTrigger id="division">
+                            <SelectValue placeholder="Select division" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {divisions.map((division) => (
+                              <SelectItem key={division.id} value={division.id}>
+                                {division.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="team1">Team 1</Label>
+                        <Select
+                          value={matchFormData.team1Id}
+                          onValueChange={(value) => setMatchFormData({ ...matchFormData, team1Id: value })}
+                          disabled={!matchFormData.divisionId}
+                        >
+                          <SelectTrigger id="team1">
+                            <SelectValue placeholder="Select team 1" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {filteredTeams.map((team) => (
+                              <SelectItem
+                                key={team.id}
+                                value={team.id}
+                                disabled={team.id === matchFormData.team2Id}
+                              >
+                                {team.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="team2">Team 2</Label>
+                        <Select
+                          value={matchFormData.team2Id}
+                          onValueChange={(value) => setMatchFormData({ ...matchFormData, team2Id: value })}
+                          disabled={!matchFormData.divisionId}
+                        >
+                          <SelectTrigger id="team2">
+                            <SelectValue placeholder="Select team 2" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {filteredTeams.map((team) => (
+                              <SelectItem
+                                key={team.id}
+                                value={team.id}
+                                disabled={team.id === matchFormData.team1Id}
+                              >
+                                {team.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="date">Date</Label>
+                        <Input
+                          id="date"
+                          type="date"
+                          value={formatDateForInput(matchFormData.date)}
+                          onChange={(e) => setMatchFormData({ ...matchFormData, date: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="time">Time (Optional)</Label>
+                        <Input
+                          id="time"
+                          type="time"
+                          value={matchFormData.time}
+                          onChange={(e) => setMatchFormData({ ...matchFormData, time: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="venue">Venue (Optional)</Label>
+                        <Input
+                          id="venue"
+                          value={matchFormData.venue}
+                          onChange={(e) => setMatchFormData({ ...matchFormData, venue: e.target.value })}
+                          placeholder="Enter venue"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="status">Status</Label>
+                        <Select
+                          value={matchFormData.status}
+                          onValueChange={(value) => setMatchFormData({ ...matchFormData, status: value })}
+                        >
+                          <SelectTrigger id="status">
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">Pending Approval</SelectItem>
+                            <SelectItem value="scheduled">Scheduled</SelectItem>
+                            <SelectItem value="completed">Completed</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsCreateMatchDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleCreateMatchSubmit}
+                        disabled={!matchFormData.team1Id || !matchFormData.team2Id || !matchFormData.date || !matchFormData.status}
+                      >
+                        Create Match
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Edit Match Dialog */}
+                <Dialog open={isEditMatchDialogOpen} onOpenChange={setIsEditMatchDialogOpen}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Edit Match</DialogTitle>
+                      <DialogDescription>
+                        Update match details and schedule.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-division">Division</Label>
+                        <Select
+                          value={editMatchFormData.divisionId}
+                          onValueChange={(value) => {
+                            setEditMatchFormData({
+                              ...editMatchFormData,
+                              divisionId: value,
+                              team1Id: '',
+                              team2Id: ''
+                            });
+                            // Filter teams by selected division
+                            const divisionTeams = teams.filter(team =>
+                              team.division?.id === value
+                            );
+                            setFilteredTeams(divisionTeams);
+                          }}
+                        >
+                          <SelectTrigger id="edit-division">
+                            <SelectValue placeholder="Select division" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {divisions.map((division) => (
+                              <SelectItem key={division.id} value={division.id}>
+                                {division.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-team1">Team 1</Label>
+                        <Select
+                          value={editMatchFormData.team1Id}
+                          onValueChange={(value) => setEditMatchFormData({ ...editMatchFormData, team1Id: value })}
+                        >
+                          <SelectTrigger id="edit-team1">
+                            <SelectValue placeholder="Select team 1" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {filteredTeams.map((team) => (
+                              <SelectItem
+                                key={team.id}
+                                value={team.id}
+                                disabled={team.id === editMatchFormData.team2Id}
+                              >
+                                {team.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-team2">Team 2</Label>
+                        <Select
+                          value={editMatchFormData.team2Id}
+                          onValueChange={(value) => setEditMatchFormData({ ...editMatchFormData, team2Id: value })}
+                        >
+                          <SelectTrigger id="edit-team2">
+                            <SelectValue placeholder="Select team 2" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {filteredTeams.map((team) => (
+                              <SelectItem
+                                key={team.id}
+                                value={team.id}
+                                disabled={team.id === editMatchFormData.team1Id}
+                              >
+                                {team.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-date">Date</Label>
+                        <Input
+                          id="edit-date"
+                          type="date"
+                          value={formatDateForInput(editMatchFormData.date)}
+                          onChange={(e) => setEditMatchFormData({ ...editMatchFormData, date: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-time">Time (Optional)</Label>
+                        <Input
+                          id="edit-time"
+                          type="time"
+                          value={editMatchFormData.time}
+                          onChange={(e) => setEditMatchFormData({ ...editMatchFormData, time: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-venue">Venue (Optional)</Label>
+                        <Input
+                          id="edit-venue"
+                          value={editMatchFormData.venue}
+                          onChange={(e) => setEditMatchFormData({ ...editMatchFormData, venue: e.target.value })}
+                          placeholder="Enter venue"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-status">Status</Label>
+                        <Select
+                          value={editMatchFormData.status}
+                          onValueChange={(value) => setEditMatchFormData({ ...editMatchFormData, status: value })}
+                        >
+                          <SelectTrigger id="edit-status">
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">Pending Approval</SelectItem>
+                            <SelectItem value="scheduled">Scheduled</SelectItem>
+                            <SelectItem value="completed">Completed</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsEditMatchDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleEditMatchSubmit}
+                        disabled={!editMatchFormData.team1Id || !editMatchFormData.team2Id || !editMatchFormData.date || !editMatchFormData.status}
+                      >
+                        Save Changes
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Delete Match Dialog */}
+                <Dialog open={isDeleteMatchDialogOpen} onOpenChange={setIsDeleteMatchDialogOpen}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2 text-destructive">
+                        <AlertCircle className="w-5 h-5" />
+                        Delete Match
+                      </DialogTitle>
+                      <DialogDescription>
+                        This action cannot be undone. This will permanently delete the match.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                      {selectedMatch && (
+                        <div className="space-y-2 border rounded-md p-4">
+                          <div className="font-medium">{selectedMatch.team1?.name} vs {selectedMatch.team2?.name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {formatDate(selectedMatch.scheduled_date)}
+                            {selectedMatch.scheduled_time && ` at ${selectedMatch.scheduled_time}`}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Status: <span className="capitalize">{selectedMatch.status}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsDeleteMatchDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={handleDeleteMatchSubmit}
+                      >
+                        Delete Match
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Generate Division Matches Dialog */}
+                <Dialog open={isGenerateMatchesDialogOpen} onOpenChange={setIsGenerateMatchesDialogOpen}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Generate Division Matches</DialogTitle>
+                      <DialogDescription>
+                        Automatically create matches between all teams in a division.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="generate-division">Select Division</Label>
+                        <Select
+                          value={generateMatchesFormData.divisionId}
+                          onValueChange={(value) => setGenerateMatchesFormData({ divisionId: value })}
+                        >
+                          <SelectTrigger id="generate-division">
+                            <SelectValue placeholder="Select division" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {divisions.map((division) => (
+                              <SelectItem key={division.id} value={division.id}>
+                                {division.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="bg-blue-50 p-4 rounded-md">
+                        <h4 className="font-medium text-blue-800 mb-2">How this works:</h4>
+                        <ol className="text-sm text-blue-700 space-y-1 list-decimal pl-4">
+                          <li>Select a division to generate matches between all teams</li>
+                          <li>Review the generated matches</li>
+                          <li>Set schedule details (date, time, venue) for all matches</li>
+                          <li>Players will receive these matches as "pending" for approval</li>
+                        </ol>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsGenerateMatchesDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleGenerateMatches}
+                        disabled={!generateMatchesFormData.divisionId}
+                      >
+                        Generate Matches
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Clear All Matches Dialog */}
+                <Dialog open={isClearMatchesDialogOpen} onOpenChange={setIsClearMatchesDialogOpen}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2 text-destructive">
+                        <AlertCircle className="w-5 h-5" />
+                        Clear All Matches
+                      </DialogTitle>
+                      <DialogDescription>
+                        This action cannot be undone. This will permanently delete all matches in this league
+                        and reset all team statistics to zero.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="bg-red-50 p-4 rounded-md">
+                        <h4 className="font-medium text-red-800 mb-2">Warning:</h4>
+                        <ul className="text-sm text-red-700 space-y-1 list-disc pl-4">
+                          <li>All matches will be permanently deleted</li>
+                          <li>All team statistics will be reset to zero</li>
+                          <li>All match confirmations will be deleted</li>
+                          <li>This action cannot be reversed</li>
+                        </ul>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="clear-confirmation" className="text-destructive">
+                          Type <span className="font-semibold">CLEAR ALL MATCHES</span> to confirm
+                        </Label>
+                        <Input
+                          id="clear-confirmation"
+                          value={clearMatchesConfirmation}
+                          onChange={(e) => setClearMatchesConfirmation(e.target.value)}
+                          placeholder="Type CLEAR ALL MATCHES to confirm"
+                          className="border-destructive"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsClearMatchesDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={handleClearAllMatches}
+                        disabled={clearMatchesConfirmation !== 'CLEAR ALL MATCHES'}
+                      >
+                        Clear All Matches
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Bulk Schedule Dialog */}
+                <Dialog open={isBulkScheduleDialogOpen} onOpenChange={setIsBulkScheduleDialogOpen}>
+                  <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle>Schedule Generated Matches</DialogTitle>
+                      <DialogDescription>
+                        Set date, time, and venue for {generatedMatches.length} matches.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="bulk-date">Date</Label>
+                        <Input
+                          id="bulk-date"
+                          type="date"
+                          value={formatDateForInput(bulkScheduleFormData.date)}
+                          onChange={(e) => setBulkScheduleFormData({ ...bulkScheduleFormData, date: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="bulk-time">Time (Optional)</Label>
+                        <Input
+                          id="bulk-time"
+                          type="time"
+                          value={bulkScheduleFormData.time}
+                          onChange={(e) => setBulkScheduleFormData({ ...bulkScheduleFormData, time: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="bulk-venue">Venue (Optional)</Label>
+                        <Input
+                          id="bulk-venue"
+                          value={bulkScheduleFormData.venue}
+                          onChange={(e) => setBulkScheduleFormData({ ...bulkScheduleFormData, venue: e.target.value })}
+                          placeholder="Enter venue"
+                        />
+                      </div>
+
+                      <div className="border rounded-md p-4 max-h-60 overflow-y-auto">
+                        <h4 className="font-medium mb-2">Generated Matches:</h4>
+                        <ul className="space-y-2">
+                          {generatedMatches.map((match, index) => (
+                            <li key={index} className="text-sm border-b pb-2">
+                              {match.team1Name} vs {match.team2Name}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsBulkScheduleDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleBulkScheduleSubmit}
+                        disabled={!bulkScheduleFormData.date}
+                      >
+                        Schedule All Matches
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Leaderboard Tab */}
+          <TabsContent value="leaderboard" className="space-y-6">
+            {leagueId && (
+              <Leaderboard
+                leagueId={leagueId}
+                showDivisionFilter={true}
+                compact={false}
+              />
+            )}
+          </TabsContent>
+
+          {/* Settings Tab */}
+          <TabsContent value="settings" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="w-5 h-5" />
+                  League Settings
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {league && (
+                  <LeagueSettingsForm league={league} leagueId={leagueId} onUpdate={fetchLeague} />
+                )}
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
-        <ScoreRecordingModal
-          isOpen={scoreModalOpen}
-          onClose={() => {
-            setScoreModalOpen(false);
-            setSelectedMatchForScoring(null);
-          }}
-          match={selectedMatchForScoring}
-          onScoreRecorded={() => {
-            fetchAdminMatches(); // Refresh admin matches
-            fetchFixtures(); // Refresh fixtures if needed
-          }}
-          />
       </div>
+    </div>
   );
 };
 
 export default ManageLeague;
 
-function fetchMatches() {
-  throw new Error('Function not implemented.');
-}
+

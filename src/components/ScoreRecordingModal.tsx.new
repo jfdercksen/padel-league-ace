@@ -1,0 +1,642 @@
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Trophy, X, Save, MapPin, Clock, Calendar } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+
+// Update the Match interface to be more flexible
+interfac;daleRecordingMoefault Scor
+export d;
+};
+alog>
+    ) </Di
+   >gContent</Dialo
+              </div>v>
+      </di  ton>
+         </But}
+              )        </>
+            ult
+        Record Res            
+       -2" />4 h-4 mrassName="w- cl       <Save               <>
+       
+          ) : (     >
+             </         
+  g...  Recordin          
+        /div>in mr-2"><te-sp anima-full roundedransparentt-ter-rdhite boborder-w4 border-2 h-"w-4 me= classNa    <div              <>
+                  g ? (
+mittin      {sub             >
+       der-2"
+  sm:or1 order-auto full sm:w-reen-700 w-g-gver:b600 ho"bg-green-sName=    clas             
+mitting}sub  disabled={           
+    Submit}{handle   onClick=       
+       <Button        
+             
+   n>utto/B          <
+      Cancel         " />
+   -4 mr-2 hName="w-4lass    <X c             >
+    
+       " sm:order-1to order-2-aul sm:ww-ful"lassName=       c     tting}
+    d={submi    disable         Close} 
+   lick={on     onC  
+         outline" iant="       var 
+         ton <But
+           ">-gray-200order4 border-t bpt-ap-3 :flex-row g flex-col smName="flexiv class <d      d */}
+     le Optimizes - Mobi Buttonon* Acti    {/  
+
+               )}
+   ert>/Al       <on>
+     ertDescripti  </Al      
+        ror}        {er>
+        0 text-sm"ext-red-70Name="ttion classescrip    <AlertD          
+  ">-5000 bg-redborder-red-2ssName=" <Alert cla    
+       {error && (           
+ }r Message */  {/* Erro    
+
+          </Card>      ntent>
+   </CardCo            )}
+             </div>
+             p>
+            </           }
+  ing()eScoreStr  {generat                 ">
+ 900-blue-old textont-blg fm:text-t-base sssName="tex <p cla                  Label>
+     </              
+  view: Score Prech    Mat                ">
+ block mb-1ext-blue-800t-medium t"text-sm fonclassName=el         <Lab       ">
+     unded-lgue-50 roblt-4 p-3 bg-="massNamev cl   <di            (
+  !== '') && Gameseam2 set.t &&s !== ''.team1Gamee(set => set{sets.som           */}
+      timizede OpilMobw -  Previecore      {/* S              ))}
+
+     
+         </div>           /div>
+         <          /div>
+              <  
+         />                       ium h-12"
+-med fonttext-lg-center Name="text   class                    "
+ eholder="0    plac                    
+rget.value)}.ta em2Games',ex, 'teaore(indateSetSc(e) => upde={nChang     o                  2Games}
+ t.team  value={se                     "7"
+     max=                  "0"
+  in=    m            "
+        "numbertype=                     t
+   npu        <I            abel>
+    </L                    
+    }2' 'Team ||name 2?.teamh.      {matc               ">
+   ock mb-1nd blregrout-muted-fo-xs textext="ssName<Label cla                   >
+     e="flex-1"sNamv clas        <di           
+ ore */} 2 Sc{/* Team                   
+                  /div>
+             <        v>
+          </di                        -
+               enter">
+ justify-center ems-cflex itounded-full  h-8 r-8gray-100 w bg-d-foreground-muteold text-bext-lg fontame="tssN cla   <div                   
+  ter">ustify-cenr jcenteex items-fllassName="      <div c              */}
+VS Divider     {/*                   
+         
+         </div>              />
+                      "
+        -12m h font-mediut-lgt-center tex="texassName        cl           0"
+     ="deracehol          pl              alue)}
+rget.vtaames', e.x, 'team1GScore(inde=> updateSetChange={(e)    on               
+      am1Games}lue={set.te va                       ax="7"
+ m                   0"
+    min="                       ber"
+ "num      type=        
+           <Input                       bel>
+       </La                eam 1'}
+ ?.name || 'T.team1match    {              ">
+      b-1ound block md-foregrtext-mutexs ="text-lassName <Label c                       ">
+me="flex-1ssNa   <div cla       
+           Score */}{/* Team 1            ">
+        4er sm:gap-m:items-centflex space-y-0 sm:m:s-y-3 spacelassName="s<div c                
+    /} Input *st Score* Mobile-Fir      {/         
+                 
+        l>abe       </L      an>
+        </sp                x + 1}
+   de Set {in                      ">
+ ded text-xs-2 py-1 rounlue-800 pxtext-bbg-blue-100 ssName=" <span cla         
+          ">r gap-2tems-centeium flex im font-medext-same="tssN <Label cla            
+       space-y-3">className="={index} <div key                 => (
+et, index)((s{sets.map                ace-y-4">
+me="sp classNardContent   <Ca
+         /CardHeader>  <
+                 </p>
+         6).games (or 7-6 irst to rd padel: fnda. Staamy each te bs wonEnter game          ">
+      groundrext-muted-fo-sm teextme="t<p classNa              >
+  ardTitle Scores</CSetg">Enter -lsm:texte -bassName="textTitle clas     <Card       
+    pb-3">ame=" classNerrdHead  <Ca          <Card>
+   
+         */}d izeptimbile O - Montrye E* Scor{/    
+
+        ></Card           eader>
+     </CardH     iv>
+          </d    iv>
+        </d              )}
+             >
+         </div            
+     span>tch.venue}</>{ma <span              
+         " />"w-4 h-4e=sNamn clas      <MapPi           
+       ">r gap-2 items-centeme="flexassNacl<div                    nue && (
+ tch.vema         {
+           v>     </di                       )}
+     />
+           <                 an>
+   ed_time}</spch.schedul<span>{mat                      
+  4 ml-2" />-4 h-ssName="wk cla<Cloc                 
+            <>                    (
+d_time &&leh.schedumatc {                
+   span>ing()}</StrtoLocaleDatee).duled_dat.scheatchw Date(mne  <span>{               
+   h-4" />me="w-4 r classNa   <Calenda                  gap-2">
+eritems-centme="flex ssNa   <div cla                 1">
+-y-ound spaceregruted-fotext-m-sm sName="textdiv clas           <     
+               
+   </div>             dge>
+  </Ba                ets
+   est of 3 S    B               ">
+ t-xs0 texext-blue-800 te-10-blusName="bg clasdge      <Ba           Badge>
+            </          sion'}
+  'Diviion?.name ||tch.divis         {ma   >
+        xs"ame="text-lassNcondary" cariant="se v     <Badge          }
+           )          
+    /Badge>          <   }
+       ue.namech.leag  {mat                     xt-xs">
+ teme="assNane" cliant="outliBadge var     <        (
+        &&name ?.match.league     {            ">
+   p-2lex-wrap ga"flex fassName= <div cl           
+                        </h3>
+        
+     2'}</span>| 'Teamname |team2?.">{match.nelism:ine="block sNamclas  <span              an>
+     vs</sp mx-2">undregro-foe text-mutedn sm:inlindeame="hidpan classN  <s           an>
+       '}</spTeam 1 ' ||?.namematch.team1line">{ock sm:ine="blam classN<span                  
+  tight">-lg leading-textm: text-base soldmibset-="fonamelassN      <h3 c          -2">
+space-yame="classNiv   <d              ">
+Name="pb-3lassHeader c<Card                <Card>
+      
+  timized */} Mobile OpMatch Info -     {/*       e-y-6">
+ pacm:sce-y-4 s"spaassName= <div cl     ader>
+
+  </DialogHe   n>
+     DescriptioDialog    </ch
+         mator this scores fthe final     Enter      ption>
+    DialogDescri <     
+      alogTitle>   </Di       t
+   Resulrd Match     Reco
+       h-5" />5 sName="w-asrophy cl         <T>
+   ext-lg"gap-2 tems-center  it"flexName=lassle cgTit    <Dialo
+        >gHeaderlo    <Dia    ">
+-y-autoverflow90vh] ol max-h-[vw] max-w-2xw-[95lassName="ent cCont     <Dialog  
+    }}>
+ e onClose();  els     n();
+ ndleOpeen) ha (op  if{
+      ={(open) => nOpenChange={isOpen} oalog openn (
+    <Di
+  retur
+   }
+  };s
+ t than statore importans mult iatch res- mere w h't thro   // Donrror);
+   ', ets: team stapdatingError ur('erro   console.   
+error) {tch (    } ca    }
+
+    }
+    d);
+   leagueIleague_id',('       .eq   d)
+  d', teamI'team_i     .eq(
+       )      }nts
+      wPoi points: ne        
+     tchesWon,ewMan: n_wo matches          ayed,
+   esPlwMatchnees_played:    match  
+         te({      .upda  ions')
+    istratue_regrom('leag      .f      ase
+ supabawait        te
+   updamore direct Try one          //.');
+
+ ..e updateone morting g('Attempole.lo     cons     s');
+d valueatch expecteon\'t mtats ded - son failerificatiUpdate vog('⚠️ sole.l         conints) {
+
+ Pos !== newata.pointerifyD
+          vhesWon ||= newMatces_won !=ata.matchyD  verif
+        ayed ||hesPl= newMatc !=playedta.matches_Da(verify    if    re time
+ mone e, try o didn't tak updateon shows theerificatif v// I
+        Data);
+', verifyin database:stats dated ION - UpIFICAT.log('✓ VERle    conso) {
+    erifyDataror && vrifyEr   if (!ve
+   ;
+e() .singl)
+       leagueId, e_id'('leagu    .eq    Id)
+eam', team_id      .eq('tts')
+  _won, poinmatchesd, yepla'matches_ct(.sele      ations')
+  ague_registr'lefrom(   .   upabase
+  wait s } = aErrorerify, error: v verifyDatanst { data:    cossful
+  cceas sute what the updaeck t Double-chON:RIFICATI // VE  lt);
+
+   Resu, updateated stats:''Upd.log(onsole`);
+      c{leagueId}league $teamId} in m ${ly for teassfuled succeattats updlog(`✅ Ssole.      con
+
+ }    teError;
+  upda throw    ;
+   ateError)tats:', updating team sr('Error updsole.erro  con
+      rror) {pdateE    if (urecord
+
+  ted  updarn theetu // R.select();     
+   eagueId)_id', lq('league   .e   Id)
+  am_id', team.eq('te              })
+
+  intss: newPontpoi         ,
+ onchesWwon: newMat    matches_   layed,
+   atchesPplayed: newMmatches_          update({
+      .s')
+  ationgistrgue_re .from('lea
+       abaseait supor } = awteErrupda: sult, errorateReta: updnst { daco      ination
+eague combfic team-lthis speci for tse sta// Updat
+      });
+1
+      ? 3 : Added: won  points    nts,
+   newPoi     n,
+   ewMatchesWo       nayed,
+ wMatchesPl      ne
+  w stats:', {alculated nelog('Cole.      consloss
+
+for for win, 1 nts ); // 3 poiwon ? 3 : 1s || 0) + (pointtats?.currentS = (wPoints   const ne);
+   1 : 0on ?  || 0) + (wontches_wtats?.ma(currentSchesWon = nst newMat   co0) + 1;
+   ed || hes_playtctats?.macurrentS (Played =ewMatchesconst n    s
+  new valueate Calcul   // 
+   ntStats);
+te:', curreFORE updaent stats BEg('Curre.lo  consol }
+
+    or;
+     fetchErr     throw rror);
+    fetchE:',statscurrent tching or fe.error('Errconsole    or) {
+    rrf (fetchE   i
+   ingle();
+  .s)
+      Idueleagague_id', .eq('le       teamId)
+ ', ('team_id      .eqs')
+  oint, ps_won, matcheplayedtches_'mat(selec     .ns')
+   tiotrague_regis'lea     .from(pabase
+   wait surror } = aror: fetchE, erentStatsta: curr  const { dation
+    ague combinateam-les specific hi tnt stats forcurre Get //h
+      e approacd updatdarLLBACK: Stan     // FA}
+
+ 
+       rpcError);d update:',arandstng back to d, fallition failebase funcg('Dataonsole.lo
+        cror) {Er (rpccatch      } or);
+rpcErrpdate:', o standard u back td, fallingailetion call fse funcatabale.log('D  conso       }
+
+  n;
+      retur        
+       }
+ate');
+    I upd Uteia immedorge foralocalStin tats stored ed team s📊 Updatle.log('  conso         tats));
+ istingS(extringifySON.s', JdTeamStats('updateemrage.setItocalSto      l    
+  rageStocal to lo Save back //
+                  }
+s);
+     eamStatats.push(tistingStex             lse {
+  e      }      Stats;
+ex] = teammIndteaistingStats[ ex           = 0) {
+  amIndex >f (te        i   agueId);
+ d === legueId && s.lea=== teamIteamId : any) => s.x((sts.findIndexistingSta e teamIndex =onst    c      tats
+  his team's sate td or upd // Ad
+           );
+| '[]'') |tsStaeamem('updatedTetItorage.ge(localSt = JSON.parsgStatsonst existin      cy
+      y arrae emptnitializs or iisting stat/ Get ex      /   ;
+
+           }now()
+    mp: Date. timesta            .points,
+ updatedStatsoints:    p         s_won,
+  s.matcheatupdatedStatches_won:          m,
+     playedmatches_pdatedStats.ed: umatches_play   
+           eagueId,      l  ,
+      mId        tea= {
+      mStats    const tea     team
+    s for this updated stat the re/ Sto        /ts) {
+    pdatedStatsError && u!sta    if (
+      e();
+ingl       .s   eId)
+  _id', leaguague    .eq('le         teamId)
+m_id',.eq('tea         ints')
+   _won, poeslayed, matches_ptch'ma .select(   )
+        ations'istrreg('league_.from      ase
+      abawait sup = rror } statsEats, error:pdatedSt{ data: unst           co UI update
+mmediate for ilStoragets in locaated stae the updorSt // 
+         nction');
+tabase fuvia dapdated m stats ug('✅ Teaole.lo        consr) {
+  rro   if (!rpcE );
+
+            }
+   
+       wonn:    wo        eId,
+  leaguid:gue_     lea,
+       eamId_id: tam         te    {
+   ,
+      stats'ate_team_        'updrpc(
+  it supabase.ror } = awarpcErult, error: data: rpcResst {    coneated
+     nction we crase fu the datab Use
+        //     try {
+ ttennd consisatomic ae is updathe  ensures t // Thiss
+     tion race condi to avoidike updateect SQL-l Use a dirACH:PROCT UPDATE AP/ DIRE /
+
+     on:', won);('Wog  console.l`);
+    ueId} ===GUE ${leag IN LEAteamId}FOR TEAM ${S PDATING STAT= U.log(`==le     conso try {
+ ) => {
+   ingstragueId: n, lebooleang, won: Id: strisync (team aTeamStats =date
+  const uptisticsm sta Update tea;
+
+  //
+    }
+  });ng(falseubmitti  setS    inally {
+);
+    } f.' try againe. Pleaseorecord scailed to ror('FetErr);
+      serror', ng score:ror recordi'Ere.error(onsol c
+     or) { catch (err  }...');
+
+  scheduledPage reload le.log('conso         
+ , 500);
+     }d();
+   reloan.tiondow.loca
+        widage reloae pa complet // Force {
+       ) => tTimeout((d
+      seeload before r closemodal isensure the delay to mall / Use a s  /
+       
+   ard');bod leader updateload to showte page reng comple🏆 Forcilog('sole. con  ata
+   h dre fres to ensuge reloadomplete pae a corcUTION: FIRECT SOL
+      // D  ose();
+      onClmodal
+    ose // Cl     
+  ;
+     Recorded()  onScore    ack
+allb coriginalall the // C    
+      
+   }     rboards();
+adelLey).refreshAl as an (window
+       ction');rds funAllLeaderboashng refreallily cDirecte.log('🔄 sol
+        con{erboards) reshAllLead as any).refndowif ((wients
+      oard componted Leaderbof any mounect refresh  dir aceX: ForCAL FI // CRITI          
+ leagueId);
+s(shEventRefre triggerAll     
+patchedre disre they'odal to ensu mosingORE clBEFevents refresh ger ig      // Tr    
+;
+  ())ingw().toStre.no', DatmpTimestahResulttem('matcorage.setIsionSt      sesleagueId);
+LeagueId', 'matchResultge.setItem(torasionS     ses'true');
+ Result', ('fromMatchage.setItemnStorsio     ses
+ andings page for the StnStoragessiotats in se sted teame upda// Store th         
+ );
+  ccessfully' updated sustatseam d trded an Score reco'✅og(le.lconso  
+      
+    );
+      ]leagueId)m1SetWins, Wins > teateam2Set2_id, .teamtchStats(maupdateTeam   
+      leagueId),SetWins,team21SetWins > am1_id, teammatch.teamStats(pdateTe       uise.all([
+ await Prom);
+      ..'tics. team statis('Updatingonsole.logs
+      cI updatee Ulete beforons are compbase operatis all datarehis ensu   // Tl
+   odaclosing ms BEFORE  statisticate teamUpdT CHANGE: / IMPORTAN  /   
+       nknown';
+ue_id || 'u0]?.leagtch[updatedMaeagueId = nst l  codata
+    ted match om the updaeague ID fr the l// Get);
+
+      tch[0]dMa, updatelly:'sfucces updated sug('✅ Match.lonsole
+
+      co
+      });as updated'tch w('No maow new Errorhr
+        tong');ight be wrD me match Is means ththi- d  was updatechr('No mate.errool        cons 0) {
+h.length ===atcdatedMtch || up!updatedMa   if (   }
+
+      chError;
+  throw mat  ;
+    atchError)iled:', mch update farror('Matsole.e  con
+      ) {hErrorf (matc
+      iMatch);
+ateda:', upddatUpdated og('ole.l  cons    chError);
+or:', mate.log('Err   consol ===');
+    RESULTDATEH UP== MATCle.log('= consoted
+
+     s updat wasee wha select to ); // Addt(lec  .se)
+      d', match.ideq('i  .)
+              }ing()
+toISOStr). new Date(dated_at:        up,
+  innerId_team_id: winner        w,
+  insetW team2Seam2_score:        ttWins,
+  m1Secore: tea     team1_s,
+     ed'mplettus: 'co    stae({
+      pdat
+        .u'matches')m(.froe
+        wait supabasor } = ahErrrror: matcch, e: updatedMat datanst {
+      cotswith resultch date the maUp
+      // leted');
+o: compl be set t wil'Statuse.log(consol;
+       winnerId)ner ID:',ole.log('Winons
+      cns);team2SetWi', e:oram2 Sc.log('Te console     SetWins);
+e:', team1Team1 Scorle.log('onso   cid);
+   atch.ID:', m.log('Match nsole
+      coUG ===');ATE DEBCH UPD('=== MAT console.log
+
+     d;team2_iid : match.atch.team1_Wins ? ms > team2Setm1SetWinnnerId = tea const wi
+     0;|| ins 2SetWamalidation.te2SetWins = vonst team   c|| 0;
+   Wins team1Set validation.s =eam1SetWinonst t  
+      c
+    );coreStringe:', s scor.log('Matchsole   cong();
+   StrinteScoreing = generat scoreStr   cons
+   oggingor lore string fUse the sc //       {
+  trynull);
+
+  setError(  e);
+  rubmitting(t    setSu
+
+
+    }turn;      reore');
+d sc'Invalierror || (validation.rroretE  s{
+    ion.valid) (!validat 
+    if Sets();
+   telidation = vaconst valida) => {
+     async (eSubmit =ndlconst ha score
+  Submit the/   };
+
+  /hed');
+ents dispatcefresh evll re.log('✅ Asol   con  
+ }
+   e);
+    :',getoralocalSting rror setole.error('E
+      conscatch (e) {   } gueId);
+ ', leachLeaguestMat('la.setItemrage    localStong());
+  ).toStrinow(ate', Date.atchUpdastMm('lterage.setISto  local try {
+    
+   amp...');date timestring last upe.log('📡 Stool   consd refresh
+ unt-baser mostamp fotore time 5: S  // Method    
+   }
+   ;
+', e)oards:rbLeadellefreshAalling rrror cror('Econsole.ere) {
+      atch (    } c
+
+      }boards();eaderreshAllLrefw as any).   (windo     
+..');nction.h fufresg direct reCallinole.log('📡   cons{
+      rds) derboalLearefreshAldow as any). if ((win        try {
+ e)
+if availablesh calls (efrirect r: D Method 4    //
+    e);
+    }
+ event:', freshing globalRepatchor dis'Erre.error(   consol (e) {
+   atch
+    } c
+      })); } gueIdr, leareshCounte.globalRefany)ndow as nter: (wiil: { coueta
+        desh', { alRefr('globmEvent(new CustoEventw.dispatch
+      windoter++;CounshfreRe any).global (window as
+     
+      }nter = 0;eshCoufr.globalRey)anndow as         (widefined) {
+er === unntCouefreshlRany).globaow as  if ((wind
+     ry {  t;
+  ..')ounter.refresh cbal pdating gloole.log('📡 U    consounter
+a global c updating o refresh bymponents t all coForcehod 3:  // Met  
+     }
+  ', e);
+  nt: eveshoardRefreing leaderbatchError disperror('nsole.  co    ) {
+(ecatch 
+    }       }));gueId } 
+, leach.idatchId: matate.now(), mtamp: Dail: { times     det{ 
+   Refresh', aderboard'lent(ustomEve Cnt(newtchEvedispandow.     wi
+ y {.');
+    trh event..rboardRefreseadeatching l'📡 Dispog(   console.l
+ tailth dent wivetom e 2: Cus // Method  
+       }
+t:', e);
+  ed evenRecordscoreg  dispatchinrrorole.error('Eons{
+      ctch (e)    } ca
+ '));ecordedt('scoreRennew CustomEvvent(tchEwindow.dispa
+      rded'));Recont('scorent(new EvechEvew.dispat windoty
+     tibilize compas to maximith method // Use bo
+     ry {..');
+    ted event.ecordching scoreRat Displog('📡nsole.ATED
+    coPERLY CREIS IS PROTHE t - ENSURded evencoreRecorstom sthod 1: Cu    // Me
+
+    NTS...');EFRESH EVEGERING ALL R.log('🚀 TRIGle
+    consoing) => {trueId: sents = (leagAllRefreshEver triggy
+  constatibilitimum compfor maxh methods ispatc event d: MultipleCED // ENHAN
+
+ ;
+  };.join(', ')eam2Games}`)es}-${set.tet.team1Gam(set => `${sSets.maprn filled    retu'');
+ames !== .team2G '' && setmes !==t.team1Gat => ses.filter(seetlledSets = s const fi => {
+   tring = ()oreSgenerateScg
+  const core strinate final s Calcul;
+
+  //;
+  }m2SetWins }tWins, teateam1Sed: true, { valireturn }
+
+    
+    ;ts' }in 2 se must we: Someone incompletchMatror: 'lse, eralid: fa { vreturn {
+      s) < 2)team2SetWinins, ax(team1SetW (Math.mif  
+   won 2 sets)neplete (someos com iatch m ifeck/ Ch);
+
+    /  }  }
+  s++;
+    team2SetWin
+            } else {
+  Wins++;    team1Setes) {
+    team2Gam > eam1Games      if (t
+
+      ames);(set.team2GInt = parseteam2Games   const ;
+   s)am1Gament(set.tes = parseI team1Gameonst c  t => {
+   ch(seEadSets.for
+    fille 0;
+s =2SetWin team    letins = 0;
+et team1SetWinner
+    lh wine matcto determns  wisetlculate / Ca  /    }
+
+  sets' };
+ least 2 have at'Match must or: : false, errn { valid   retur
+   ength < 2) {edSets.lll
+    if (fimplete match cos for a3 set2 or have ust 
+
+    // M   }   }
+ s 7` };
+   a set im games in : Maximu + 1} `Set ${ie, error:: falsidal{ v return      7) {
+    (maxGames >
+
+      if
+      } };ave 5 or 6`ust h loser mes,er has 7 gam If winn}:Set ${i + 1 `ror: erse,lid: falvaturn {       re< 5) {
+  minGames 7 && s === maxGame
+      if (  }
+  k` };
+  ea or tiebrto 7-6 should go , the sete. At 6-6alid scor{i + 1}: Inv $et`Se, error: alid: fals vn {     retur 6) {
+    minGames >=&& 6 axGames ===
+      if (m
+      }
+` };ast 6 gamest have at leWinner mus1}: + {i t $: `Sealse, errorid: frn { val  retu      < 6) {
+xGames       if (maGames);
+
+Games, team2(team1inth.mes = Manst minGam comes);
+     m2Gatea1Games, team = Math.max(Games max   consttion
+   et validasic padel s      // Ba;
+
+team2Games)nt(set.parseI2Games = nst team     coGames);
+ am1.te(seteIntrs = pamesonst team1Ga
+      clledSets[i]; = fiet   const s {
+   length; i++)s.edSet 0; i < fillr (let i =
+    fodel scoringd paet for valied sach fill // Check e   }
+
+ };
+    t score't one se at leasnterease e: 'Plrorse, eral flid:urn { va    ret {
+   === 0)ts.lengthledSeif (fil
+    '');
+     !== meset.team2Ga ss !== '' &&team1Gameet.> ster(set =ils.f= setdSets  fille   const= () => {
+ alidateSets  const vores
+ te set sclida
+
+  // Va };   }
+ 
+ ll);r(nu   setErro));
+       
+   : set: value }eam], [tx ? { ...set== setInde     index =   index) => 
+et, ap((s> prev.mts(prev =    setSe   {
+<= 7))Int(value) = 0 && parsealue) >t(v& parseInt(value) &/.tes(/^\d+$'' || === if (value s)
+    akbrer tie fonting0-7, accouores (d game sc vali Only allow//    
+> {tring) = value: ss',Games' | 'team2'team1Gameam: : number, teIndexe = (setteSetScort updare
+  const scoc sea specifite   // Upda  };
+
+);
+etError(null   s
+ }
+    ]);m2Games: '' : '', teaesteam1Gam
+      {  '' },eam2Games: '', tes:1Gam      { team' },
+m2Games: ', teaes: '' { team1Gam
+        setSets([> {
+ Open = () = handlestconal opens
+   when mod Reset form
+
+  //eturn null;h) r if (!matcl);
+
+ nul>(| nullte<string Sta] = use, setErrorerror
+  const [e(false); useStatmitting] =etSubting, st [submit
+  cons;  ]): '' }
+am2Games, teames: '' team1G   {
+ '' },: eam2GamesGames: '', t{ team1  ,
+   '' }Games:team21Games: '',     { teamcore[]>([
+tate<SetSts] = useSts, setSe  const [ses) => {
+dalPropordingMo}: ScoreReceRecorded atch, onScorlose, msOpen, onC= ({ il ecordingModareR
+
+const Scoing;
+}m2Games: strring;
+  teames: st{
+  team1GatScore ace Senterf;
+}
+
+ivoid> ed: () =ScoreRecordull;
+  onh | n Matcatch:
+  m => void;e: ()  onClosolean;
+isOpen: bo{
+  odalProps rdingMcoce ScoreRenterfa}
+
+i;
+ string
+  venue?:ing; str?:uled_timeg;
+  sched: strindateuled_
+  sched};ring : ston: { name divisial
+  Make optionstring }; //name: : { 
+  league? string;team2_id:g;
+  d: strineam1_i  t
+ng };e: strim2: { nam teatring };
+ ame: s team1: { ning;
+ {
+  id: stre Match 

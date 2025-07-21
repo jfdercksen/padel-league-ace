@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import ScoreRecordingModal from '@/components/ScoreRecordingModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+
 import { Match } from '@/types/match';
 
 interface MatchConfirmation {
@@ -45,8 +46,13 @@ interface MatchConfirmation {
   //division: { name: string };
 //}
 
+
 const Matches = () => {
   const { profile } = useAuth();
+  const canEditCompletedMatch = (match: Match) => {
+    // Only allow admins to edit completed matches
+    return profile?.role === 'league_admin' || profile?.role === 'super_admin';
+  };
   const [pendingConfirmations, setPendingConfirmations] = useState<MatchConfirmation[]>([]);
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([]);
   const [completedMatches, setCompletedMatches] = useState<Match[]>([]);
@@ -65,142 +71,198 @@ const Matches = () => {
   }, [profile]);
 
     const fetchMatches = async () => {
-      if (!profile) return;
+  if (!profile) return;
 
+  try {
+    // Get teams where user is a player
+    const { data: userTeams, error: teamsError } = await supabase
+      .from('teams')
+      .select('id')
+      .or(`player1_id.eq.${profile.id},player2_id.eq.${profile.id}`);
+
+    if (teamsError) throw teamsError;
+    const teamIds = userTeams?.map(t => t.id) || [];
+
+    console.log('Team IDs:', teamIds);
+
+    if (teamIds.length === 0) {
+      setLoading(false);
+      return;
+    }
+
+    // Get pending confirmations
+    const supabaseAny = supabase as any;
+      const { data: confirmations, error: confirmError } = await supabaseAny
+        .from('match_confirmations')
+        .select(`
+          id,
+          match_id,
+          team_id,
+          status,
+          match:matches (
+            scheduled_date,
+            scheduled_time,
+            venue,
+            team1:teams!matches_team1_id_fkey(name),
+            team2:teams!matches_team2_id_fkey(name),
+            league:leagues(name),
+            division:divisions(name)
+          )
+        `)
+        .in('team_id', teamIds)
+        .eq('status', 'pending');
+
+      if (confirmError) throw confirmError;
+
+      // Clean select fields
+      const selectFields = `
+        id,
+        league_id,
+        division_id,
+        team1_id,
+        team2_id,
+        scheduled_date,
+        scheduled_time,
+        venue,
+        status,
+        team1_score,
+        team2_score,
+        winner_team_id,
+        match_duration,
+        created_at,
+        updated_at,
+        round_number,
+        match_number,
+        created_by,
+        team1:teams!matches_team1_id_fkey(name),
+        team2:teams!matches_team2_id_fkey(name),
+        league:leagues(name),
+        division:divisions(name)
+      `;
+
+      const [result1, result2] = await Promise.all([
+        supabase
+          .from('matches')
+          .select(selectFields)
+          .in('team1_id', teamIds)
+          .order('updated_at', { ascending: false }), // Order by updated_at to get fresh data first
+        supabase
+          .from('matches')
+          .select(selectFields)
+          .in('team2_id', teamIds)
+          .order('updated_at', { ascending: false })
+      ]);
+
+      if (result1.error) throw result1.error;
+      if (result2.error) throw result2.error;
+
+      // Combine and deduplicate matches
+      const allMatchesData = [...(result1.data || []), ...(result2.data || [])];
+      const uniqueMatches = allMatchesData.filter((match, index, self) => 
+        index === self.findIndex(m => m.id === match.id)
+      );
+
+      // Sort by scheduled date
+      uniqueMatches.sort((a, b) => new Date(b.scheduled_date || 0).getTime() - new Date(a.scheduled_date || 0).getTime());
+
+      // IMPROVED FILTERING LOGIC - More explicit conditions
+      const upcoming = uniqueMatches.filter(match => {
+        const hasNoScores = match.team1_score === null && match.team2_score === null;
+        const isConfirmed = match.status === 'confirmed';
+        const isNotCompleted = match.status !== 'completed';
+        return isConfirmed && hasNoScores && isNotCompleted;
+      });
+      
+      const completed = uniqueMatches.filter(match => {
+        const hasScores = match.team1_score !== null || match.team2_score !== null;
+        const isCompleted = match.status === 'completed';
+        return isCompleted || hasScores;
+      });
+
+      console.log('Filtering Debug:', {
+        totalMatches: uniqueMatches.length,
+        upcomingCount: upcoming.length,
+        completedCount: completed.length,
+        sampleMatches: uniqueMatches.slice(0, 2).map(m => ({
+          id: m.id,
+          status: m.status,
+          team1_score: m.team1_score,
+          team2_score: m.team2_score,
+          teams: `${m.team1.name} vs ${m.team2.name}`
+        }))
+      });
+
+      setPendingConfirmations(confirmations || []);
+      setUpcomingMatches(upcoming);
+      setCompletedMatches(completed);
+      setAllMatches(uniqueMatches);
+    } catch (error) {
+      console.error('Error fetching matches:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+    const handleConfirmMatch = async (confirmationId: string) => {
+      setProcessing(confirmationId);
       try {
-        // Get teams where user is a player
-        const { data: userTeams, error: teamsError } = await supabase
-          .from('teams')
-          .select('id')
-          .or(`player1_id.eq.${profile.id},player2_id.eq.${profile.id}`);
-
-        if (teamsError) throw teamsError;
-        const teamIds = userTeams?.map(t => t.id) || [];
-
-        console.log('Team IDs:', teamIds);
-
-        if (teamIds.length === 0) {
-          setLoading(false);
-          return;
-        }
-
-        // Get pending confirmations
         const supabaseAny = supabase as any;
-        const { data: confirmations, error: confirmError } = await supabaseAny
+        
+        // Step 1: Get the match_id from this confirmation
+        const { data: confirmationData, error: confirmError } = await supabaseAny
           .from('match_confirmations')
-          .select(`
-            id,
-            match_id,
-            team_id,
-            status,
-            match:matches (
-              scheduled_date,
-              scheduled_time,
-              venue,
-              team1:teams!matches_team1_id_fkey(name),
-              team2:teams!matches_team2_id_fkey(name),
-              league:leagues(name),
-              division:divisions(name)
-            )
-          `)
-          .in('team_id', teamIds)
-          .eq('status', 'pending');
+          .select('match_id')
+          .eq('id', confirmationId)
+          .single();
 
         if (confirmError) throw confirmError;
 
-        // Clean select fields without any comments
-        const selectFields = `
-          id,
-          league_id,
-          division_id,
-          team1_id,
-          team2_id,
-          scheduled_date,
-          scheduled_time,
-          venue,
-          status,
-          team1_score,
-          team2_score,
-          winner_team_id,
-          match_duration,
-          created_at,
-          updated_at,
-          round_number,
-          match_number,
-          created_by,
-          team1:teams!matches_team1_id_fkey(name),
-          team2:teams!matches_team2_id_fkey(name),
-          league:leagues(name),
-          division:divisions(name)
-        `;
+        // Step 2: Update this team's confirmation status
+        const { data, error } = await supabaseAny
+          .from('match_confirmations')
+          .update({ 
+            status: 'confirmed',
+            responded_at: new Date().toISOString()
+          })
+          .eq('id', confirmationId)
+          .select();
 
-        const [result1, result2] = await Promise.all([
-          supabase.from('matches').select(selectFields).in('team1_id', teamIds),
-          supabase.from('matches').select(selectFields).in('team2_id', teamIds)
-        ]);
+        if (error) throw error;
 
-        if (result1.error) throw result1.error;
-        if (result2.error) throw result2.error;
+        // Step 3: Check if ALL teams have now confirmed this match
+        const { data: allConfirmations, error: allConfirmError } = await supabaseAny
+          .from('match_confirmations')
+          .select('status')
+          .eq('match_id', confirmationData.match_id);
 
-        // Combine and deduplicate matches
-        const allMatchesData = [...(result1.data || []), ...(result2.data || [])];
-        const uniqueMatches = allMatchesData.filter((match, index, self) => 
-          index === self.findIndex(m => m.id === match.id)
-        );
+        if (allConfirmError) throw allConfirmError;
 
-        // Sort by scheduled date
-        uniqueMatches.sort((a, b) => new Date(b.scheduled_date || 0).getTime() - new Date(a.scheduled_date || 0).getTime());
+        // Step 4: If all teams confirmed, update match status to 'confirmed'
+        const allConfirmed = allConfirmations.every(conf => conf.status === 'confirmed');
+        if (allConfirmed) {
+          console.log('All teams confirmed - updating match status to confirmed');
+          const { error: matchUpdateError } = await supabase
+            .from('matches')
+            .update({ status: 'confirmed' })
+            .eq('id', confirmationData.match_id);
+            
+          if (matchUpdateError) {
+            console.error('Error updating match status:', matchUpdateError);
+          } else {
+            console.log('✅ Match status updated to confirmed');
+          }
+        }
 
-        const upcoming = uniqueMatches.filter(match => 
-          match.status === 'confirmed' && !match.team1_score && !match.team2_score
-        );
-        const completed = uniqueMatches.filter(match => 
-          match.status === 'completed' || match.team1_score !== null || match.team2_score !== null
-        );
-
-        console.log('Confirmations:', confirmations);
-        console.log('All matches:', uniqueMatches);
-
-        setPendingConfirmations(confirmations || []);
-        setUpcomingMatches(upcoming);
-        setCompletedMatches(completed);
-        setAllMatches(uniqueMatches);
+        // Step 5: Remove from pending list and refresh data
+        setPendingConfirmations(prev => prev.filter(c => c.id !== confirmationId));
+        await fetchMatches(); // Refresh to update upcoming matches
+        
       } catch (error) {
-        console.error('Error fetching matches:', error);
+        console.error('Error confirming match:', error);
       } finally {
-        setLoading(false);
+        setProcessing(null);
       }
     };
-
-    const handleConfirmMatch = async (confirmationId: string) => {
-  console.log('🚀 Player confirming match confirmation:', confirmationId);
-  setProcessing(confirmationId);
-  
-  try {
-    const supabaseAny = supabase as any;
-    
-    const { error } = await supabaseAny
-      .from('match_confirmations')
-      .update({ 
-        status: 'confirmed',
-        responded_at: new Date().toISOString()
-      })
-      .eq('id', confirmationId);
-
-    if (error) throw error;
-    console.log('✅ Player confirmation updated successfully');
-
-    setPendingConfirmations(prev => prev.filter(c => c.id !== confirmationId));
-    await fetchMatches();
-    
-    console.log('✅ Player confirmation completed - admin will handle match status updates');
-    
-  } catch (error) {
-    console.error('❌ Error confirming match:', error);
-  } finally {
-    setProcessing(null);
-  }
-};
 
   const handleRequestReschedule = async (confirmationId: string) => {
     if (!rescheduleForm.reason.trim()) {
@@ -234,7 +296,7 @@ const Matches = () => {
       setProcessing(null);
     }
   };
-  // In Matches.tsx, add the debug function and call it in fetchMatches():
+  
   const debugUpcomingMatches = (allMatches: any[]) => {
     console.log('=== DEBUG UPCOMING MATCHES ===');
     allMatches.forEach((match, index) => {
@@ -243,111 +305,127 @@ const Matches = () => {
     });
   };
 
-  const renderMatchCard = (match: Match, showActions = false) => (
-  <Card key={match.id} className="hover:shadow-lg transition-shadow">
-    <CardContent className="p-4 sm:p-6">
-      {/* Mobile-first layout */}
-      <div className="space-y-4">
-        {/* Header Row - Teams and Status */}
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-          <div className="flex-1">
-            {/* Teams */}
-            <h4 className="text-lg font-semibold leading-tight">
-              <span className="block sm:inline">{match.team1.name}</span>
-              <span className="hidden sm:inline text-muted-foreground mx-2">vs</span>
-              <span className="block sm:inline text-sm sm:text-lg text-muted-foreground sm:text-foreground">
-                vs {match.team2.name}
-              </span>
-            </h4>
-            
-            {/* Score Display */}
-            {match.team1_score !== null && match.team2_score !== null && (
-              <p className="text-sm sm:text-base text-muted-foreground mt-1">
-                Final Score: <span className="font-semibold">{match.team1_score} - {match.team2_score}</span>
-              </p>
-            )}
-          </div>
-          
-          {/* Status Badge */}
-          <div className="flex-shrink-0">
-            <Badge className={`text-xs ${
-              match.status === 'completed' ? 'bg-green-100 text-green-800' :
-              match.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
-              'bg-gray-100 text-gray-800'
-            }`}>
-              {match.status === 'completed' ? 'Completed' :
-               match.status === 'confirmed' ? 'Confirmed' :
-               match.status}
-            </Badge>
-          </div>
-        </div>
+  const renderMatchCard = (match: Match, showActions = false) => {
+    const isCompleted = match.status === 'completed' || (match.team1_score !== null && match.team2_score !== null);
+    const canRecord = !isCompleted || canEditCompletedMatch(match);
 
-        {/* Badges Row */}
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="text-xs">
-            {match.league.name}
-          </Badge>
-          <Badge variant="secondary" className="text-xs">
-            {match.division.name}
-          </Badge>
-        </div>
-        
-        {/* Match Details */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 flex-shrink-0" />
-            <span className="truncate">
-              {new Date(match.scheduled_date).toLocaleDateString()}
-            </span>
-          </div>
-          
-          {match.scheduled_time && (
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 flex-shrink-0" />
-              <span>{match.scheduled_time}</span>
+    return (
+      <Card key={match.id} className="hover:shadow-lg transition-shadow">
+        <CardContent className="p-4 sm:p-6">
+          {/* Mobile-first layout */}
+          <div className="space-y-4">
+            {/* Header Row - Teams and Status */}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="flex-1">
+                {/* Teams */}
+                <h4 className="text-lg font-semibold leading-tight">
+                  <span className="block sm:inline">{match.team1.name}</span>
+                  <span className="hidden sm:inline text-muted-foreground mx-2">vs</span>
+                  <span className="block sm:inline text-sm sm:text-lg text-muted-foreground sm:text-foreground">
+                    vs {match.team2.name}
+                  </span>
+                </h4>
+                
+                {/* Score Display */}
+                {match.team1_score !== null && match.team2_score !== null && (
+                  <p className="text-sm sm:text-base text-muted-foreground mt-1">
+                    Final Score: <span className="font-semibold">{match.team1_score} - {match.team2_score}</span>
+                  </p>
+                )}
+              </div>
+              
+              {/* Status Badge */}
+              <div className="flex-shrink-0">
+                <Badge className={`text-xs ${
+                  match.status === 'completed' ? 'bg-green-100 text-green-800' :
+                  match.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {match.status === 'completed' ? 'Completed' :
+                  match.status === 'confirmed' ? 'Confirmed' :
+                  match.status}
+                </Badge>
+              </div>
             </div>
-          )}
-          
-          {match.venue && (
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 flex-shrink-0" />
-              <span className="truncate">{match.venue}</span>
+
+            {/* Badges Row */}
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="text-xs">
+                {match.league.name}
+              </Badge>
+              <Badge variant="secondary" className="text-xs">
+                {match.division.name}
+              </Badge>
             </div>
-          )}
-        </div>
-        
-        {/* Action Buttons */}
-        {showActions && (
-          <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-gray-100">
-            {/* Record Result button for upcoming matches */}
-            {match.status === 'confirmed' && !match.team1_score && !match.team2_score && (
-              <Button 
-                size="sm" 
-                className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
-                onClick={() => {
-                  setSelectedMatchForScoring(match);
-                  setScoreModalOpen(true);
-                }}
-              >
-                <Trophy className="w-4 h-4 mr-2" />
-                Record Result
-              </Button>
-            )}
             
-            {/* View Details button */}
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="w-full sm:w-auto"
-            >
-              View Details
-            </Button>
+            {/* Match Details */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate">
+                  {new Date(match.scheduled_date).toLocaleDateString()}
+                </span>
+              </div>
+              
+              {match.scheduled_time && (
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 flex-shrink-0" />
+                  <span>{match.scheduled_time}</span>
+                </div>
+              )}
+              
+              {match.venue && (
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 flex-shrink-0" />
+                  <span className="truncate">{match.venue}</span>
+                </div>
+              )}
+            </div>
+            
+            {/* Action Buttons */}
+            {showActions && (
+              <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-gray-100">
+                {/* Record Result button - improved condition */}
+                {canRecord && match.status === 'confirmed' && (
+                  <Button 
+                    size="sm" 
+                    className={`w-full sm:w-auto ${
+                      isCompleted 
+                        ? 'bg-orange-600 hover:bg-orange-700' 
+                        : 'bg-green-600 hover:bg-green-700'
+                    }`}
+                    onClick={() => {
+                      setSelectedMatchForScoring(match);
+                      setScoreModalOpen(true);
+                    }}
+                  >
+                    <Trophy className="w-4 h-4 mr-2" />
+                    {isCompleted ? 'Edit Result' : 'Record Result'}
+                  </Button>
+                )}
+                
+                {/* Show read-only indicator for completed matches when user can't edit */}
+                {isCompleted && !canEditCompletedMatch(match) && (
+                  <Badge variant="secondary" className="text-xs self-start">
+                    Result Recorded
+                  </Badge>
+                )}
+                
+                {/* View Details button */}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full sm:w-auto"
+                >
+                  View Details
+                </Button>
+              </div>
+            )}
           </div>
-        )}
-      </div>
-    </CardContent>
-  </Card>
-);
+        </CardContent>
+      </Card>
+    );
+  };
 
   const renderEmptyState = (icon: any, title: string, description: string) => (
     <Card className="border-dashed border-2">

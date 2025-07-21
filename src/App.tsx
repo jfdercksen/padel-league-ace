@@ -13,6 +13,7 @@ import ManageLeague from "./pages/ManageLeague";
 import CreateTeam from "./pages/CreateTeam";
 import JoinLeague from "./pages/JoinLeague";
 import ManageTeam from "./pages/ManageTeam";
+import Standings from "./pages/Standings";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ const App = () => (
             <Route path="/create-team" element={<CreateTeam />} />
             <Route path="/join-league/:teamId" element={<JoinLeague />} />
             <Route path="/manage-team/:teamId" element={<ManageTeam />} />
+            <Route path="/standings" element={<Standings />} />
           </Routes>
         </BrowserRouter>
       </TooltipProvider>

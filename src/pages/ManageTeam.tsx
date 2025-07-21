@@ -368,16 +368,60 @@ const ManageTeam = () => {
                     </div>
 
                     {/* Player 2 */}
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <User className="w-4 h-4 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">{team.player2.full_name}</p>
-                          <p className="text-sm text-muted-foreground">{team.player2.email}</p>
+                    {team.player2 ? (
+                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <User className="w-4 h-4 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">{team.player2.full_name}</p>
+                            <p className="text-sm text-muted-foreground">{team.player2.email}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">Player</Badge>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            className="text-destructive hover:bg-destructive/10"
+                            onClick={() => {
+                              if (window.confirm(`Are you sure you want to remove ${team.player2.full_name} from the team?`)) {
+                                supabase
+                                  .from('teams')
+                                  .update({ player2_id: null })
+                                  .eq('id', team.id)
+                                  .then(({ error }) => {
+                                    if (error) {
+                                      console.error('Error removing player:', error);
+                                      setError('Failed to remove player. Please try again.');
+                                    } else {
+                                      setSuccess('Player removed successfully.');
+                                      // Update local state
+                                      setTeam({
+                                        ...team,
+                                        player2: null,
+                                        player2_id: null
+                                      });
+                                    }
+                                  });
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
-                      <Badge variant="outline">Player</Badge>
-                    </div>
+                    ) : (
+                      <div className="flex items-center justify-between p-3 border rounded-lg border-dashed">
+                        <div className="flex items-center gap-3">
+                          <User className="w-4 h-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-muted-foreground">No second player</p>
+                            <p className="text-sm text-muted-foreground">Invite a player to join your team</p>
+                          </div>
+                        </div>
+                        <Badge variant="outline">Empty</Badge>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

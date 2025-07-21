@@ -310,6 +310,77 @@ const CreateLeague = () => {
                     />
                   </div>
                 </div>
+
+                <div className="border-t pt-4 mt-4">
+                  <Label className="mb-2 block">Divisions</Label>
+                  <div className="grid md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <Label htmlFor="numDivisions" className="text-sm text-muted-foreground">Number of Divisions</Label>
+                      <Select
+                        value={formData.divisions.length.toString()}
+                        onValueChange={(value) => {
+                          const numDivisions = parseInt(value);
+                          const currentDivisions = [...formData.divisions];
+                          const defaultDivisionNames = ['Division A', 'Division B', 'Division C', 'Division D', 'Division E', 'Division F'];
+                          
+                          // If increasing divisions, add new ones with default names
+                          if (numDivisions > currentDivisions.length) {
+                            const newDivisions = [...currentDivisions];
+                            for (let i = currentDivisions.length; i < numDivisions; i++) {
+                              newDivisions.push(defaultDivisionNames[i] || `Division ${i + 1}`);
+                            }
+                            setFormData(prev => ({ ...prev, divisions: newDivisions }));
+                          } 
+                          // If decreasing divisions, remove from the end
+                          else if (numDivisions < currentDivisions.length) {
+                            setFormData(prev => ({ 
+                              ...prev, 
+                              divisions: currentDivisions.slice(0, numDivisions) 
+                            }));
+                          }
+                        }}
+                      >
+                        <SelectTrigger id="numDivisions">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 Division</SelectItem>
+                          <SelectItem value="2">2 Divisions</SelectItem>
+                          <SelectItem value="3">3 Divisions</SelectItem>
+                          <SelectItem value="4">4 Divisions</SelectItem>
+                          <SelectItem value="5">5 Divisions</SelectItem>
+                          <SelectItem value="6">6 Divisions</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Teams per Division (Approx.)</Label>
+                      <div className="h-10 px-4 py-2 border rounded-md bg-muted/50 text-sm">
+                        {Math.ceil(parseInt(formData.maxTeams) / formData.divisions.length)} teams
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <Label className="text-sm text-muted-foreground">Division Names</Label>
+                    {formData.divisions.map((division, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <Input
+                          value={division}
+                          onChange={(e) => {
+                            const newDivisions = [...formData.divisions];
+                            newDivisions[index] = e.target.value;
+                            setFormData(prev => ({ ...prev, divisions: newDivisions }));
+                          }}
+                          placeholder={`Division ${index + 1}`}
+                        />
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          (Level {index + 1})
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
