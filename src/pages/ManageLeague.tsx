@@ -1663,11 +1663,16 @@ const ManageLeague = () => {
                                       onClick={async () => {
                                         try {
                                           // Update the registration status to approved
+                                          // First, get the registration ID
+                                          const registration = team.registrations && team.registrations[0];
+                                          if (!registration) {
+                                            throw new Error("Registration not found");
+                                          }
+                                          
                                           const { error } = await supabase
                                             .from('league_registrations')
                                             .update({ status: 'approved' })
-                                            .eq('team_id', team.id)
-                                            .eq('league_id', leagueId);
+                                            .eq('id', registration.id);
 
                                           if (error) throw error;
 
