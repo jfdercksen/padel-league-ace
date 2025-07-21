@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { 
   ArrowLeft, 
   Users, 
@@ -16,10 +17,14 @@ import {
   Trash2,
   User,
   Crown,
-  Trophy
+  Trophy,
+  Mail,
+  UserPlus,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { sendTeamInvitationEmail } from '@/utils/emailService';
 import Header from '@/components/Header';
 
 interface Team {
@@ -71,9 +76,12 @@ const ManageTeam = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  const [inviting, setInviting] = useState(false);
   
   // Form state
   const [teamName, setTeamName] = useState('');
+  const [teammateEmail, setTeammateEmail] = useState('');
 
   useEffect(() => {
     fetchTeamData();
@@ -419,23 +427,159 @@ const ManageTeam = () => {
                             <p className="text-sm text-muted-foreground">Invite a player to join your team</p>
                           </div>
                         </div>
-                        <Badge variant="outline">Empty</Badge>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setIsInviteDialogOpen(true)}
+                        >
+                          <UserPlus className="w-4 h-4 mr-1" />
+                          Invite Player
+                        </Button>
                       </div>
                     )}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Note about member management */}
-              <Card>
-                <CardContent className="p-6 text-center">
-                  <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="font-semibold mb-2">Member Management</h3>
-                  <p className="text-muted-foreground text-sm">
-                    Advanced member management features (invitations, removing players) will be available soon.
-                  </p>
-                </CardContent>
-              </Card>
+              {/* Invite Player Dialog */}
+              <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>Invite Player</DialogTitle>
+                    <DialogDescription>
+                      Send an invitation to a player to join your team.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="teammateEmail">Teammate Email</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="teammateEmail"
+                          type="email"
+                          value={teammateEmail}
+                          onChange={(e) => setTeammateEmail(e.target.value)}
+                          placeholder="teammate@example.com"
+                          className="pl-10"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Your teammate will be added immediately if they have an account, or invited to join if they need to register first.
+                      </p>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsInviteDialogOpen(false)}>Cancel</Button>
+                    <Button 
+                      onClick={async () => {
+                        if (!teammateEmail.trim()) {
+                          setError('Teammate email is required');
+                          return;
+                        }
+                        
+                        if (teammateEmail === profile?.email) {
+                          setError('You cannot invite yourself to a team');
+                          return;
+                        }
+                        
+                        setInviting(true);
+                        setError(null);
+                        
+                        try {
+                          // Check if teammate exists in the system
+                          const { data: existingUser } = await supabase
+                            .from('profiles')
+                            .select('id, full_name, email')
+                            .eq('email', teammateEmail.trim())
+                            .single();
+                            
+                          if (existingUser) {
+                            // Update team with existing user as player2
+                            const { error: teamError } = await supabase
+                              .from('teams')
+                              .update({ player2_id: existingUser.id })
+                              .eq('id', team.id);
+                              
+                            if (teamError) throw teamError;
+                            
+                            // Send email notification to the existing user
+                            try {
+                              await sendTeamInvitationEmail(
+                                existingUser.email,
+                                team.name,
+                                profile?.full_name || 'Team Captain'
+                              );
+                              console.log('Team addition email sent successfully to existing user');
+                            } catch (emailError) {
+                              console.error('Failed to send team addition email:', emailError);
+                            }
+                            
+                            setSuccess(`${existingUser.full_name} has been added to your team!`);
+                            
+                            // Update local state
+                            setTeam({
+                              ...team,
+                              player2_id: existingUser.id,
+                              player2: {
+                                full_name: existingUser.full_name,
+                                email: existingUser.email
+                              }
+                            });
+                          } else {
+                            // Create invitation for non-existing user
+                            const { error: inviteError } = await supabase
+                              .from('team_invitations')
+                              .insert({
+                                team_id: team.id,
+                                email: teammateEmail.trim(),
+                                invited_by: profile?.id,
+                                status: 'pending'
+                              });
+                              
+                            if (inviteError) throw inviteError;
+                            
+                            // Send email notification to the invited teammate
+                            try {
+                              await sendTeamInvitationEmail(
+                                teammateEmail.trim(),
+                                team.name,
+                                profile?.full_name || 'Team Captain'
+                              );
+                              console.log('Team invitation email sent successfully');
+                            } catch (emailError) {
+                              console.error('Failed to send invitation email:', emailError);
+                            }
+                            
+                            setSuccess(`Invitation sent to ${teammateEmail}!`);
+                          }
+                          
+                          setIsInviteDialogOpen(false);
+                          setTeammateEmail('');
+                        } catch (err: any) {
+                          console.error('Error inviting player:', err);
+                          setError(err.message || 'Failed to invite player');
+                        } finally {
+                          setInviting(false);
+                        }
+                      }}
+                      disabled={inviting || !teammateEmail.trim()}
+                    >
+                      {inviting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="w-4 h-4 mr-2" />
+                          Send Invitation
+                        </>
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </TabsContent>
 
             {/* Leagues Tab */}

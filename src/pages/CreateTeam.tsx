@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Users, Mail, Loader2, Plus, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { sendTeamInvitationEmail } from '@/utils/emailService';
 import Header from '@/components/Header';
 import { useNavigate } from 'react-router-dom';
 
@@ -65,6 +66,19 @@ const CreateTeam = () => {
           .single();
 
         if (teamError) throw teamError;
+        
+        // Send email notification to the existing user who was added to the team
+        try {
+          await sendTeamInvitationEmail(
+            existingUser.email,
+            formData.teamName.trim(),
+            profile?.full_name || 'Team Captain'
+          );
+          console.log('Team addition email sent successfully to existing user');
+        } catch (emailError) {
+          console.error('Failed to send team addition email:', emailError);
+          // Don't throw error here, as the team was created successfully
+        }
       } else {
         // Create team with only player1, send invitation for player2
         const { data: team, error: teamError } = await supabase
@@ -91,6 +105,19 @@ const CreateTeam = () => {
           });
 
         if (inviteError) throw inviteError;
+        
+        // Send email notification to the invited teammate
+        try {
+          await sendTeamInvitationEmail(
+            formData.teammateEmail.trim(),
+            formData.teamName.trim(),
+            profile?.full_name || 'Team Captain'
+          );
+          console.log('Team invitation email sent successfully');
+        } catch (emailError) {
+          console.error('Failed to send invitation email:', emailError);
+          // Don't throw error here, as the team and invitation were created successfully
+        }
       }
 
       setSuccess(true);
