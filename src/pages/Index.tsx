@@ -545,56 +545,63 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
       {/* Hero Section */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
-        <div className="container mx-auto px-4 py-8 md:py-16 relative z-10">
-          <div className="flex flex-col md:flex-row items-center gap-8 md:gap-12">
-            {/* Left side - Text content */}
-            <div className="md:w-1/2 text-center md:text-left">
-              <Badge className="mb-6 bg-secondary text-secondary-foreground px-4 py-2">
-                <Star className="w-4 h-4 mr-2" />
-                Professional Padel Management
-              </Badge>
-              <h1 className="text-4xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-                Padel League Ace
-              </h1>
-              <p className="text-lg md:text-xl text-muted-foreground mb-8 leading-relaxed">
-                The complete platform for managing padel competitions, tournaments, and leagues. 
-                From player registration to championship celebrations.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Button 
-                  size="lg" 
-                  className="gradient-padel text-white hover:opacity-90 transition-opacity px-6 py-3 text-base"
-                  onClick={() => setAuthModal('signup')}
-                >
-                  Sign Up as Player
-                </Button>
-                <Button 
-                  size="lg" 
-                  className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-3 text-base"
-                  onClick={() => setAuthModal('signup')}
-                >
-                  Create a League
-                </Button>
-                <Button 
-                  size="lg" 
-                  variant="outline" 
-                  className="border-2 border-primary hover:bg-primary hover:text-primary-foreground px-6 py-3 text-base"
-                  onClick={() => setAuthModal('signin')}
-                >
-                  Sign In
-                </Button>
-              </div>
+      <div className="relative overflow-hidden h-screen flex items-center">
+        {/* Background Image */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center" 
+          style={{ 
+            backgroundImage: 'url("https://plus.unsplash.com/premium_photo-1708692920701-19a470ecd667?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D")',
+            filter: 'brightness(0.7)'
+          }}
+        ></div>
+        
+        {/* Overlay with gradient */}
+        <div className="absolute inset-0 bg-gradient-to-r from-black/70 to-black/40"></div>
+        
+        {/* Content */}
+        <div className="container mx-auto px-4 py-8 md:py-16 relative z-10 text-white">
+          <div className="flex flex-col items-center text-center max-w-4xl mx-auto">
+            {/* Logo */}
+            <div className="bg-white/90 rounded-full p-4 mb-8 shadow-lg">
+              <img 
+                src="/padel-logo.svg" 
+                alt="Padel League Ace Logo" 
+                className="w-40 h-40"
+              />
             </div>
             
-            {/* Right side - Image */}
-            <div className="md:w-1/2 mt-8 md:mt-0">
-              <img 
-                src="/padel-hero.svg" 
-                alt="Padel players on court" 
-                className="w-full h-auto max-w-lg mx-auto rounded-lg shadow-lg"
-              />
+            <h1 className="text-4xl md:text-6xl font-bold mb-6 text-white drop-shadow-lg">
+              Padel League Ace
+            </h1>
+            
+            <p className="text-lg md:text-xl text-white mb-12 leading-relaxed max-w-2xl drop-shadow-md">
+              The complete platform for managing padel competitions, tournaments, and leagues. 
+              From player registration to championship celebrations.
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button 
+                size="lg" 
+                className="gradient-padel text-white hover:opacity-90 transition-opacity px-8 py-4 text-lg shadow-lg"
+                onClick={() => setAuthModal('signup')}
+              >
+                Sign Up as Player
+              </Button>
+              <Button 
+                size="lg" 
+                className="bg-amber-600 hover:bg-amber-700 text-white px-8 py-4 text-lg shadow-lg"
+                onClick={() => setAuthModal('signup')}
+              >
+                Create a League
+              </Button>
+              <Button 
+                size="lg" 
+                variant="outline" 
+                className="border-2 border-white text-white hover:bg-white/20 px-8 py-4 text-lg shadow-lg"
+                onClick={() => setAuthModal('signin')}
+              >
+                Sign In
+              </Button>
             </div>
           </div>
         </div>

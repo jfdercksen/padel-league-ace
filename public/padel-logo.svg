@@ -1,0 +1,16 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#FB8500" />
+  <circle cx="100" cy="100" r="85" fill="white" />
+  
+  <!-- Padel racket -->
+  <g transform="translate(100, 100) rotate(-15)">
+    <ellipse cx="0" cy="-20" rx="40" ry="55" fill="#FB8500" stroke="#023047" stroke-width="3" />
+    <ellipse cx="0" cy="-20" rx="30" ry="45" fill="none" stroke="#023047" stroke-width="1" stroke-dasharray="3 1.5" />
+    <rect x="-7" y="35" width="14" height="40" fill="#023047" />
+    <rect x="-12" y="75" width="24" height="10" rx="3" fill="#023047" />
+  </g>
+  
+  <!-- Text "PADEL" -->
+  <text x="100" y="160" font-family="Arial, sans-serif" font-weight="bold" font-size="24" text-anchor="middle" fill="#023047">PADEL ACE</text>
+</svg>
