@@ -561,15 +561,6 @@ const Index = () => {
         {/* Content */}
         <div className="container mx-auto px-4 py-8 md:py-16 relative z-10 text-white">
           <div className="flex flex-col items-center text-center max-w-4xl mx-auto">
-            {/* Logo */}
-            <div className="bg-white/90 rounded-full p-4 mb-8 shadow-lg">
-              <img 
-                src="/padel-logo.svg" 
-                alt="Padel League Ace Logo" 
-                className="w-40 h-40"
-              />
-            </div>
-            
             <h1 className="text-4xl md:text-6xl font-bold mb-6 text-white drop-shadow-lg">
               Padel League Ace
             </h1>
@@ -596,8 +587,7 @@ const Index = () => {
               </Button>
               <Button 
                 size="lg" 
-                variant="outline" 
-                className="border-2 border-white text-white hover:bg-white/20 px-8 py-4 text-lg shadow-lg"
+                className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-4 text-lg shadow-lg"
                 onClick={() => setAuthModal('signin')}
               >
                 Sign In
@@ -686,8 +676,7 @@ const Index = () => {
             </Button>
             <Button 
               size="lg" 
-              variant="outline" 
-              className="border-2 border-white text-white hover:bg-white hover:text-primary px-8 py-4 text-lg"
+              className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-4 text-lg"
               onClick={() => setAuthModal('signin')}
             >
               Sign In
