@@ -139,10 +139,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    // Explicitly clear profile state
-    setProfile(null);
-    setUser(null);
+    try {
+      // Use the local scope option instead of global to avoid 403 errors
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) {
+        console.error('Error signing out:', error);
+      }
+      // Explicitly clear profile state
+      setProfile(null);
+      setUser(null);
+      setSession(null);
+      
+      // Force a page reload to clear any cached state
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Exception during sign out:', error);
+    }
   };
 
   const updateProfile = async (updates: Partial<Profile>) => {
