@@ -94,7 +94,7 @@ const JoinLeague = () => {
         const { data: leaguesData, error: leaguesError } = await supabase
           .from('leagues')
           .select('*')
-          .in('status', ['draft', 'registration_open'])
+          .in('status', ['draft', 'upcoming', 'active'])
           .order('start_date', { ascending: true });
 
         console.log('Available leagues:', leaguesData, 'Error:', leaguesError); // Debug log
@@ -160,13 +160,14 @@ const JoinLeague = () => {
         throw new Error('Your team is already registered for this league');
       }
 
-      // Register team for league
+      // Register team for league with pending status
       const { error } = await supabase
         .from('league_registrations')
         .insert({
           team_id: team.id,
           league_id: selectedLeague,
-          division_id: selectedDivision
+          division_id: selectedDivision,
+          status: 'pending' // Explicitly set status to pending
         });
 
       if (error) throw error;
