@@ -66,8 +66,7 @@ const CreateLeague = () => {
           venue: formData.venue,
           match_format: formData.matchFormat,
           created_by: profile?.id,
-          status: 'draft',
-          is_approved: false // Set to false by default, requiring super admin approval
+          status: 'draft' // Draft status means it requires super admin approval
         })
         .select()
         .single();
