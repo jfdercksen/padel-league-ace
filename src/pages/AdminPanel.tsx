@@ -223,6 +223,16 @@ const AdminPanel = () => {
           )}
         </div>
 
+        {/* Pending League Approvals Section */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-6">
+            <Trophy className="w-6 h-6 text-yellow-600" />
+            <h3 className="text-2xl font-bold">Pending League Approvals</h3>
+          </div>
+          
+          <PendingLeaguesSection />
+        </div>
+
         {/* All Leagues Section */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-6">
@@ -267,6 +277,225 @@ const AdminPanel = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+// Pending Leagues Section Component
+const PendingLeaguesSection = () => {
+  const [pendingLeagues, setPendingLeagues] = useState<League[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchPendingLeagues = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Fetch leagues that are pending approval (in draft status)
+        const { data, error } = await supabase
+          .from('leagues')
+          .select(`
+            *,
+            creator:profiles!leagues_created_by_fkey(full_name, email)
+          `)
+          .eq('status', 'draft')
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        // Get division counts for each league
+        const leaguesWithCounts = await Promise.all((data || []).map(async (league) => {
+          // Get divisions count
+          const { count: divisionsCount, error: divError } = await supabase
+            .from('divisions')
+            .select('id', { count: 'exact', head: true })
+            .eq('league_id', league.id);
+          
+          if (divError) console.error('Error fetching divisions count:', divError);
+          
+          return {
+            ...league,
+            divisions_count: divisionsCount || 0
+          };
+        }));
+        
+        setPendingLeagues(leaguesWithCounts);
+      } catch (err) {
+        console.error('Error fetching pending leagues:', err);
+        setError('Failed to load pending leagues. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchPendingLeagues();
+  }, []);
+
+  // Handle league approval
+  const handleApproveLeague = async (leagueId: string, approved: boolean) => {
+    setActionLoading(leagueId);
+    try {
+      // When approving a league, update its status from 'draft' to 'active'
+      // Since is_approved column doesn't exist yet, we'll just use the status field
+      const updateData = approved 
+        ? { status: 'active' } 
+        : { status: 'draft' };
+      
+      const { error } = await supabase
+        .from('leagues')
+        .update(updateData)
+        .eq('id', leagueId);
+
+      if (error) throw error;
+
+      // Remove from pending list
+      setPendingLeagues(leagues => leagues.filter(league => league.id !== leagueId));
+      
+      setMessage(approved ? 'League approved successfully!' : 'League approval revoked.');
+      
+      // Clear message after 3 seconds
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      console.error('Error updating league approval:', err);
+      setMessage('Error updating league approval. Please try again.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+  
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-8">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
+            <span>Loading pending leagues...</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-center gap-2 text-red-600 mb-2">
+            <AlertCircle className="w-5 h-5" />
+            <p className="font-medium">Error</p>
+          </div>
+          <p className="text-muted-foreground">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  if (pendingLeagues.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+          <CheckCircle className="w-12 h-12 text-green-500 mb-4" />
+          <h3 className="font-semibold mb-2">No Pending League Approvals</h3>
+          <p className="text-sm text-muted-foreground">
+            All leagues have been approved.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      {message && (
+        <Alert className={`mb-6 ${message.includes('Error') ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+          <AlertDescription className={message.includes('Error') ? 'text-red-700' : 'text-green-700'}>
+            {message}
+          </AlertDescription>
+        </Alert>
+      )}
+      
+      <div className="space-y-4">
+        {pendingLeagues.map((league) => (
+          <Card key={league.id} className="hover:shadow-lg transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex justify-between items-start">
+                <div className="space-y-3">
+                  <div>
+                    <h4 className="text-lg font-semibold">{league.name}</h4>
+                    {league.description && (
+                      <div className="text-sm text-muted-foreground">
+                        {league.description}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      <span>Created: {new Date(league.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Trophy className="w-4 h-4" />
+                      <span>Status: {league.status}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Season: </span>
+                      {new Date(league.start_date).toLocaleDateString()} - {new Date(league.end_date).toLocaleDateString()}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm font-medium">
+                      <span className="text-muted-foreground">Created by: </span>
+                      {league.creator?.full_name || 'Unknown'}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      ({league.creator?.email})
+                    </div>
+                  </div>
+                  
+                  <Badge variant="outline" className="border-yellow-300 text-yellow-700">
+                    Pending Approval
+                  </Badge>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleApproveLeague(league.id, false)}
+                    disabled={actionLoading === league.id}
+                    className="border-red-300 text-red-700 hover:bg-red-50"
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Reject
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => handleApproveLeague(league.id, true)}
+                    disabled={actionLoading === league.id}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    {actionLoading === league.id ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    ) : (
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                    )}
+                    Approve
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </>
   );
 };
 

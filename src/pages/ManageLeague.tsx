@@ -1562,7 +1562,7 @@ const ManageLeague = () => {
                           'Season Ended'}
                   </span>
                   <span className="text-xs text-gray-500 ml-1">(Status: {league.status})</span>
-                  {league.is_approved === false && (
+                  {league.status === 'draft' && (
                     <Badge className="ml-2 bg-yellow-100 text-yellow-800">Pending Approval</Badge>
                   )}
                 </div>
