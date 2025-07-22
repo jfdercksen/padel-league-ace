@@ -360,7 +360,7 @@ const LeagueSettingsForm = ({ league, leagueId, onUpdate }: LeagueSettingsFormPr
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="upcoming">Upcoming</SelectItem>
+              <SelectItem value="registration_open">Registration Open</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
