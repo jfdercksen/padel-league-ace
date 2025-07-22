@@ -379,6 +379,7 @@ const Leaderboard = ({
           team_id,
           division_id,
           points,
+          bonus_points,
           matches_played,
           matches_won,
           team:teams(
