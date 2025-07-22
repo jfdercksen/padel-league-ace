@@ -296,15 +296,13 @@ const ScoreRecordingModal = ({ isOpen, onClose, match, onScoreRecorded }: ScoreR
         const team1NewStats = {
           matches_played: (team1CurrentStats?.matches_played || 0) + 1,
           matches_won: (team1CurrentStats?.matches_won || 0) + (team1SetWins > team2SetWins ? 1 : 0),
-          points: (team1CurrentStats?.points || 0) + (team1SetWins > team2SetWins ? 3 : 1),
-          bonus_points: (team1CurrentStats?.bonus_points || 0) + team1BonusPoint
+          points: (team1CurrentStats?.points || 0) + (team1SetWins > team2SetWins ? 3 : 1)
         };
 
         const team2NewStats = {
           matches_played: (team2CurrentStats?.matches_played || 0) + 1,
           matches_won: (team2CurrentStats?.matches_won || 0) + (team2SetWins > team1SetWins ? 1 : 0),
-          points: (team2CurrentStats?.points || 0) + (team2SetWins > team1SetWins ? 3 : 1),
-          bonus_points: (team2CurrentStats?.bonus_points || 0) + team2BonusPoint
+          points: (team2CurrentStats?.points || 0) + (team2SetWins > team1SetWins ? 3 : 1)
         };
 
         console.log('New team 1 stats:', team1NewStats);
@@ -331,8 +329,7 @@ const ScoreRecordingModal = ({ isOpen, onClose, match, onScoreRecorded }: ScoreR
               p_league_id: leagueId,
               p_matches_played: team1NewStats.matches_played,
               p_matches_won: team1NewStats.matches_won,
-              p_points: team1NewStats.points,
-              p_bonus_points: team1NewStats.bonus_points
+              p_points: team1NewStats.points
             }
           );
           
@@ -369,8 +366,7 @@ const ScoreRecordingModal = ({ isOpen, onClose, match, onScoreRecorded }: ScoreR
               p_league_id: leagueId,
               p_matches_played: team2NewStats.matches_played,
               p_matches_won: team2NewStats.matches_won,
-              p_points: team2NewStats.points,
-              p_bonus_points: team2NewStats.bonus_points
+              p_points: team2NewStats.points
             }
           );
           
