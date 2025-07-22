@@ -228,7 +228,7 @@ const Leaderboard = ({
         console.log('🔄 LEADERBOARD: Using direct SQL query approach');
 
         // This is a direct query that mimics what the database function would do
-        // Now includes bonus_points after migration is applied
+        // Now includes bonus_points after successful migration
         let directQuery = supabase
           .from('league_registrations')
           .select(`
@@ -254,9 +254,10 @@ const Leaderboard = ({
           directQuery = directQuery.eq('division_id', selectedDivision);
         }
         
-        // Add ordering by points (bonus_points will be added after migration)
+        // Add ordering by total points (points + bonus_points)
         directQuery = directQuery
           .order('points', { ascending: false })
+          .order('bonus_points', { ascending: false })
           .order('matches_won', { ascending: false });
           
         // Execute the query
@@ -272,7 +273,7 @@ const Leaderboard = ({
             team_id: entry.team_id,
             division_id: entry.divisions?.id || '',
             points: entry.points || 0,
-            bonus_points: entry.bonus_points || 0, // Will be 0 if column doesn't exist yet
+            bonus_points: entry.bonus_points || 0,
             matches_played: entry.matches_played || 0,
             matches_won: entry.matches_won || 0,
             team: {
@@ -389,6 +390,7 @@ const Leaderboard = ({
           team_id,
           division_id,
           points,
+          bonus_points,
           matches_played,
           matches_won,
           team:teams(
@@ -435,11 +437,10 @@ const Leaderboard = ({
           : 0,
       }));
 
-      // Calculate total points (regular + bonus) - bonus_points will be 0 until migration
+      // Calculate total points (regular + bonus)
       const processedDataWithTotal = processedData.map(entry => ({
         ...entry,
-        bonus_points: 0, // Will be updated after migration
-        total_points: entry.points || 0 // Will include bonus points after migration
+        total_points: (entry.points || 0) + (entry.bonus_points || 0)
       }));
       
       // Sort by total points (descending), then by win percentage, then by matches won
