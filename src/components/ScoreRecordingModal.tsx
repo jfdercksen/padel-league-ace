@@ -321,80 +321,32 @@ const ScoreRecordingModal = ({ isOpen, onClose, match, onScoreRecorded }: ScoreR
           ...team2NewStats
         };
 
-        // Try to update team 1 stats using the secure function first
+        // Update team 1 stats directly
         console.log('Updating team 1 stats...');
-        try {
-          const { data: team1FunctionResult, error: team1FunctionError } = await supabase.rpc(
-            'update_team_stats_secure',
-            { 
-              p_team_id: match.team1_id,
-              p_league_id: leagueId,
-              p_matches_played: team1NewStats.matches_played,
-              p_matches_won: team1NewStats.matches_won,
-              p_points: team1NewStats.points,
-              p_bonus_points: team1NewStats.bonus_points
-            }
-          );
-          
-          if (team1FunctionError) {
-            console.error('Error updating team 1 stats with secure function:', team1FunctionError);
-            throw team1FunctionError;
-          } else {
-            console.log('✅ Team 1 stats updated successfully with secure function');
-          }
-        } catch (team1FunctionError) {
-          console.log('⚠️ Secure function failed for team 1, trying direct update');
-          
-          // Fall back to direct update
-          const { error: team1Error } = await supabase
-            .from('league_registrations')
-            .update(team1NewStats)
-            .eq('team_id', match.team1_id)
-            .eq('league_id', leagueId);
+        const { error: team1Error } = await supabase
+          .from('league_registrations')
+          .update(team1NewStats)
+          .eq('team_id', match.team1_id)
+          .eq('league_id', leagueId);
 
-          if (team1Error) {
-            console.error('Error updating team 1 stats:', team1Error);
-          } else {
-            console.log('✅ Team 1 stats updated successfully with direct update');
-          }
+        if (team1Error) {
+          console.error('Error updating team 1 stats:', team1Error);
+        } else {
+          console.log('✅ Team 1 stats updated successfully');
         }
 
-        // Try to update team 2 stats using the secure function first
+        // Update team 2 stats directly
         console.log('Updating team 2 stats...');
-        try {
-          const { data: team2FunctionResult, error: team2FunctionError } = await supabase.rpc(
-            'update_team_stats_secure',
-            { 
-              p_team_id: match.team2_id,
-              p_league_id: leagueId,
-              p_matches_played: team2NewStats.matches_played,
-              p_matches_won: team2NewStats.matches_won,
-              p_points: team2NewStats.points,
-              p_bonus_points: team2NewStats.bonus_points
-            }
-          );
-          
-          if (team2FunctionError) {
-            console.error('Error updating team 2 stats with secure function:', team2FunctionError);
-            throw team2FunctionError;
-          } else {
-            console.log('✅ Team 2 stats updated successfully with secure function');
-          }
-        } catch (team2FunctionError) {
-          console.log('⚠️ Secure function failed for team 2, trying direct update');
-          
-          // Fall back to direct update
-          const { error: team2Error } = await supabase
-            .from('league_registrations')
-            .update(team2NewStats)
-            .eq('team_id', match.team2_id)
-            .eq('league_id', leagueId);
+        const { error: team2Error } = await supabase
+          .from('league_registrations')
+          .update(team2NewStats)
+          .eq('team_id', match.team2_id)
+          .eq('league_id', leagueId);
 
-          if (team2Error) {
-            console.error('Error updating team 2 stats:', team2Error);
-          } else {
-            console.log('✅ Team 2 stats updated successfully with direct update');
-          }
+        if (team2Error) {
+          console.error('Error updating team 2 stats:', team2Error);
+        } else {
+          console.log('✅ Team 2 stats updated successfully');
         }
       } catch (statsError) {
         console.error('Error updating team stats:', statsError);
