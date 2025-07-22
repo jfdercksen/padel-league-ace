@@ -94,7 +94,7 @@ const JoinLeague = () => {
         const { data: leaguesData, error: leaguesError } = await supabase
           .from('leagues')
           .select('*')
-          .in('status', ['draft', 'upcoming', 'active'])
+          .in('status', ['draft', 'registration_open', 'active'])
           .order('start_date', { ascending: true });
 
         console.log('Available leagues:', leaguesData, 'Error:', leaguesError); // Debug log
