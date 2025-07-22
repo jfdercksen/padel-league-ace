@@ -228,6 +228,7 @@ const Leaderboard = ({
         console.log('🔄 LEADERBOARD: Using direct SQL query approach');
 
         // This is a direct query that mimics what the database function would do
+        // Now includes bonus_points after migration is applied
         let directQuery = supabase
           .from('league_registrations')
           .select(`
@@ -253,10 +254,9 @@ const Leaderboard = ({
           directQuery = directQuery.eq('division_id', selectedDivision);
         }
         
-        // Add ordering by total points (points + bonus_points)
+        // Add ordering by points (bonus_points will be added after migration)
         directQuery = directQuery
           .order('points', { ascending: false })
-          .order('bonus_points', { ascending: false })
           .order('matches_won', { ascending: false });
           
         // Execute the query
@@ -272,7 +272,7 @@ const Leaderboard = ({
             team_id: entry.team_id,
             division_id: entry.divisions?.id || '',
             points: entry.points || 0,
-            bonus_points: entry.bonus_points || 0,
+            bonus_points: entry.bonus_points || 0, // Will be 0 if column doesn't exist yet
             matches_played: entry.matches_played || 0,
             matches_won: entry.matches_won || 0,
             team: {
@@ -389,7 +389,6 @@ const Leaderboard = ({
           team_id,
           division_id,
           points,
-          bonus_points,
           matches_played,
           matches_won,
           team:teams(
@@ -436,10 +435,11 @@ const Leaderboard = ({
           : 0,
       }));
 
-      // Calculate total points (regular + bonus)
+      // Calculate total points (regular + bonus) - bonus_points will be 0 until migration
       const processedDataWithTotal = processedData.map(entry => ({
         ...entry,
-        total_points: (entry.points || 0) + (entry.bonus_points || 0)
+        bonus_points: 0, // Will be updated after migration
+        total_points: entry.points || 0 // Will include bonus points after migration
       }));
       
       // Sort by total points (descending), then by win percentage, then by matches won
