@@ -223,7 +223,7 @@ const Leagues = () => {
                             <h4 className="text-xl font-bold">{league.name}</h4>
                             <Badge className="bg-green-100 text-green-800">
                               {league.status === 'draft' ? 'Coming Soon' : 
-                               league.status === 'open' ? 'Registration Open' : 
+                               league.status === 'registration_open' ? 'Registration Open' : 
                                league.status}
                             </Badge>
                           </div>
@@ -255,11 +255,19 @@ const Leagues = () => {
                       </div>
                       
                       <div className="ml-6">
-                        <Link to="/teams">
-                          <Button className="gradient-padel text-white">
-                            Join League
-                          </Button>
-                        </Link>
+                        {profile?.role === 'player' ? (
+                          <Link to="/teams">
+                            <Button className="gradient-padel text-white">
+                              Select Team to Join
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Link to={`/leagues/${league.id}`}>
+                            <Button className="gradient-padel text-white">
+                              View League
+                            </Button>
+                          </Link>
+                        )}
                       </div>
                     </div>
                   </CardContent>
