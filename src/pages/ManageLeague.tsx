@@ -359,6 +359,7 @@ const LeagueSettingsForm = ({ league, leagueId, onUpdate }: LeagueSettingsFormPr
               <SelectValue placeholder="Select status" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="draft">Draft</SelectItem>
               <SelectItem value="upcoming">Upcoming</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
@@ -1556,8 +1557,12 @@ const ManageLeague = () => {
                   <span className="text-sm font-medium">
                     {league.status === 'active' ? 'Active Season' :
                       league.status === 'upcoming' ? 'Upcoming Season' :
-                        'Season Ended'}
+                        league.status === 'draft' ? 'Draft Mode' :
+                          'Season Ended'}
                   </span>
+                  {league.is_approved === false && (
+                    <Badge className="ml-2 bg-yellow-100 text-yellow-800">Pending Approval</Badge>
+                  )}
                 </div>
               </div>
             </CardContent>
