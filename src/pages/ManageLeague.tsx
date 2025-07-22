@@ -625,6 +625,7 @@ interface League {
   match_format?: string;
   entry_fee?: number;
   currency?: string;
+  is_approved?: boolean;
 }
 
 interface Team {
@@ -1555,11 +1556,12 @@ const ManageLeague = () => {
                 <div className="flex items-center gap-2">
                   <Trophy className="w-5 h-5 text-yellow-500" />
                   <span className="text-sm font-medium">
-                    {league.status === 'active' ? 'Active Season' :
-                      league.status === 'upcoming' ? 'Upcoming Season' :
-                        league.status === 'draft' ? 'Draft Mode' :
+                    {league.status?.toLowerCase() === 'active' ? 'Active Season' :
+                      league.status?.toLowerCase() === 'upcoming' ? 'Upcoming Season' :
+                        league.status?.toLowerCase() === 'draft' ? 'Draft Mode' :
                           'Season Ended'}
                   </span>
+                  <span className="text-xs text-gray-500 ml-1">(Status: {league.status})</span>
                   {league.is_approved === false && (
                     <Badge className="ml-2 bg-yellow-100 text-yellow-800">Pending Approval</Badge>
                   )}
