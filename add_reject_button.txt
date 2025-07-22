@@ -1,0 +1,113 @@
+// Add this import at the top of the file if not already present
+import { CheckCircle, XCircle } from 'lucide-react';
+
+// Replace the existing approval button code with this code that includes both approve and reject buttons
+{isPending && (
+  <div className="flex gap-2">
+    <Button
+      variant="outline"
+      size="sm"
+      className="bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800"
+      onClick={async () => {
+        try {
+          // Update the registration status to approved
+          // First, get the registration ID
+          const registration = team.registrations && team.registrations[0];
+          if (!registration) {
+            throw new Error("Registration not found");
+          }
+
+          const { error } = await supabase
+            .from('league_registrations')
+            .update({ status: 'approved' })
+            .eq('id', registration.id);
+
+          if (error) throw error;
+
+          // Update local state
+          setTeams(teams.map(t => {
+            if (t.id === team.id && t.registrations && t.registrations[0]) {
+              return {
+                ...t,
+                registrations: [{
+                  ...t.registrations[0],
+                  status: 'approved'
+                }]
+              };
+            }
+            return t;
+          }));
+
+          toast({
+            title: "Team Approved",
+            description: `${team.name} has been approved to join the league.`,
+            variant: "default"
+          });
+        } catch (error) {
+          console.error('Error approving team:', error);
+          toast({
+            title: "Error",
+            description: "Failed to approve team. Please try again.",
+            variant: "destructive"
+          });
+        }
+      }}
+    >
+      <CheckCircle className="w-4 h-4 mr-1" />
+      Approve
+    </Button>
+    
+    <Button
+      variant="outline"
+      size="sm"
+      className="bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800"
+      onClick={async () => {
+        try {
+          // Update the registration status to rejected
+          // First, get the registration ID
+          const registration = team.registrations && team.registrations[0];
+          if (!registration) {
+            throw new Error("Registration not found");
+          }
+
+          const { error } = await supabase
+            .from('league_registrations')
+            .update({ status: 'rejected' })
+            .eq('id', registration.id);
+
+          if (error) throw error;
+
+          // Update local state
+          setTeams(teams.map(t => {
+            if (t.id === team.id && t.registrations && t.registrations[0]) {
+              return {
+                ...t,
+                registrations: [{
+                  ...t.registrations[0],
+                  status: 'rejected'
+                }]
+              };
+            }
+            return t;
+          }));
+
+          toast({
+            title: "Team Rejected",
+            description: `${team.name} has been rejected from joining the league.`,
+            variant: "default"
+          });
+        } catch (error) {
+          console.error('Error rejecting team:', error);
+          toast({
+            title: "Error",
+            description: "Failed to reject team. Please try again.",
+            variant: "destructive"
+          });
+        }
+      }}
+    >
+      <XCircle className="w-4 h-4 mr-1" />
+      Reject
+    </Button>
+  </div>
+)}

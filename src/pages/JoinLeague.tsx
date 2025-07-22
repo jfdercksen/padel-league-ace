@@ -44,7 +44,7 @@ const JoinLeague = () => {
   const { teamId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
-  
+
   const [team, setTeam] = useState<Team | null>(null);
   const [leagues, setLeagues] = useState<League[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
@@ -246,13 +246,13 @@ const JoinLeague = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
       <Header />
-      
+
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-3xl mx-auto">
           {/* Header */}
           <div className="flex items-center gap-4 mb-8">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => navigate('/teams')}
             >
@@ -327,21 +327,21 @@ const JoinLeague = () => {
 
                   {selectedLeague && (
                     <div>
-                        <label className="text-sm font-medium">Select Division</label>
-                        <Select value={selectedDivision} onValueChange={setSelectedDivision}>
+                      <label className="text-sm font-medium">Select Division</label>
+                      <Select value={selectedDivision} onValueChange={setSelectedDivision}>
                         <SelectTrigger>
-                            <SelectValue placeholder="Choose a division" />
+                          <SelectValue placeholder="Choose a division" />
                         </SelectTrigger>
                         <SelectContent>
-                            {divisions.map((division) => (
+                          {divisions.map((division) => (
                             <SelectItem key={division.id} value={division.id}>
-                                {division.name} (Level {division.level})
+                              {division.name} (Level {division.level})
                             </SelectItem>
-                            ))}
+                          ))}
                         </SelectContent>
-                        </Select>
+                      </Select>
                     </div>
-                    )}
+                  )}
                 </CardContent>
               </Card>
 
@@ -355,13 +355,13 @@ const JoinLeague = () => {
                     {(() => {
                       const league = leagues.find(l => l.id === selectedLeague);
                       if (!league) return null;
-                      
+
                       return (
                         <div className="space-y-4">
                           {league.description && (
                             <p className="text-muted-foreground">{league.description}</p>
                           )}
-                          
+
                           <div className="grid md:grid-cols-2 gap-4 text-sm">
                             <div className="flex items-center gap-2">
                               <Calendar className="w-4 h-4 text-muted-foreground" />

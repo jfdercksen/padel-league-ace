@@ -105,6 +105,8 @@ const Leaderboard = ({
                 if (matchingStat) {
                   console.log(`🎾 LEADERBOARD: Updating team ${entry.team.name} with stats:`, matchingStat);
                   entry.points = matchingStat.points;
+                  entry.bonus_points = matchingStat.bonus_points || 0;
+                  entry.total_points = (matchingStat.points || 0) + (matchingStat.bonus_points || 0);
                   entry.matches_played = matchingStat.matches_played;
                   entry.matches_won = matchingStat.matches_won;
                   entry.matches_lost = matchingStat.matches_played - matchingStat.matches_won;
@@ -116,9 +118,11 @@ const Leaderboard = ({
               });
 
               if (dataChanged) {
-                // Re-sort the data
+                // Re-sort the data by total points (including bonus points)
                 updated.sort((a, b) => {
-                  if (b.points !== a.points) return b.points - a.points;
+                  const aTotalPoints = (a.points || 0) + (a.bonus_points || 0);
+                  const bTotalPoints = (b.points || 0) + (b.bonus_points || 0);
+                  if (bTotalPoints !== aTotalPoints) return bTotalPoints - aTotalPoints;
                   if (b.win_percentage !== a.win_percentage) return b.win_percentage - a.win_percentage;
                   return b.matches_won - a.matches_won;
                 });
@@ -230,6 +234,7 @@ const Leaderboard = ({
             team_id,
             division_id,
             points,
+            bonus_points,
             matches_played,
             matches_won,
             teams!inner (
@@ -248,9 +253,10 @@ const Leaderboard = ({
           directQuery = directQuery.eq('division_id', selectedDivision);
         }
         
-        // Add ordering
+        // Add ordering by total points (points + bonus_points)
         directQuery = directQuery
           .order('points', { ascending: false })
+          .order('bonus_points', { ascending: false })
           .order('matches_won', { ascending: false });
           
         // Execute the query
@@ -266,6 +272,7 @@ const Leaderboard = ({
             team_id: entry.team_id,
             division_id: entry.divisions?.id || '',
             points: entry.points || 0,
+            bonus_points: entry.bonus_points || 0,
             matches_played: entry.matches_played || 0,
             matches_won: entry.matches_won || 0,
             team: {
@@ -285,6 +292,7 @@ const Leaderboard = ({
             points_per_match: entry.matches_played > 0
               ? (entry.points || 0) / entry.matches_played
               : 0,
+            total_points: (entry.points || 0) + (entry.bonus_points || 0)
           }));
 
           // Filter by division if selected (client-side filter)
@@ -326,6 +334,7 @@ const Leaderboard = ({
             team_id: entry.team_id,
             division_id: entry.division_id || '', // Make sure we have division_id for filtering
             points: entry.points || 0,
+            bonus_points: entry.bonus_points || 0,
             matches_played: entry.matches_played || 0,
             matches_won: entry.matches_won || 0,
             team: {
@@ -346,6 +355,7 @@ const Leaderboard = ({
             points_per_match: entry.matches_played > 0
               ? (entry.points || 0) / entry.matches_played
               : 0,
+            total_points: (entry.points || 0) + (entry.bonus_points || 0)
           }));
           
           // Filter by division if selected (client-side filter)

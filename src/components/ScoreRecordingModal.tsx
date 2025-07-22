@@ -361,8 +361,22 @@ const ScoreRecordingModal = ({ isOpen, onClose, match, onScoreRecorded }: ScoreR
       // Store updated team stats in localStorage for immediate UI update
       try {
         const updatedStats = [
-          { teamId: match.team1_id, leagueId, points: team1Result?.points, matches_played: team1Result?.matches_played, matches_won: team1Result?.matches_won },
-          { teamId: match.team2_id, leagueId, points: team2Result?.points, matches_played: team2Result?.matches_played, matches_won: team2Result?.matches_won }
+          { 
+            teamId: match.team1_id, 
+            leagueId, 
+            points: team1Result?.points, 
+            bonus_points: team1Result?.bonus_points,
+            matches_played: team1Result?.matches_played, 
+            matches_won: team1Result?.matches_won 
+          },
+          { 
+            teamId: match.team2_id, 
+            leagueId, 
+            points: team2Result?.points, 
+            bonus_points: team2Result?.bonus_points,
+            matches_played: team2Result?.matches_played, 
+            matches_won: team2Result?.matches_won 
+          }
         ];
         localStorage.setItem('updatedTeamStats', JSON.stringify(updatedStats));
         console.log('✅ Updated team stats stored in localStorage for immediate UI update');
