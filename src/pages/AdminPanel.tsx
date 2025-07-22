@@ -434,16 +434,28 @@ const AllLeaguesSection = () => {
   const handleApproveLeague = async (leagueId: string, approved: boolean) => {
     setActionLoading(leagueId);
     try {
+      // When approving a league, also update its status from 'draft' to 'active'
+      const updateData = approved 
+        ? { is_approved: true, status: 'active' } 
+        : { is_approved: false };
+      
       const { error } = await supabase
         .from('leagues')
-        .update({ is_approved: approved })
+        .update(updateData)
         .eq('id', leagueId);
 
       if (error) throw error;
 
       // Update local state
       setLeagues(leagues.map(league => 
-        league.id === leagueId ? { ...league, is_approved: approved } : league
+        league.id === leagueId 
+          ? { 
+              ...league, 
+              is_approved: approved,
+              // Also update the status in local state if approving
+              ...(approved ? { status: 'active' } : {})
+            } 
+          : league
       ));
 
       setMessage(approved ? 'League approved successfully!' : 'League approval revoked.');
