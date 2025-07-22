@@ -273,14 +273,14 @@ const ScoreRecordingModal = ({ isOpen, onClose, match, onScoreRecorded }: ScoreR
         // Get current stats for both teams first
         const { data: team1CurrentStats } = await supabase
           .from('league_registrations')
-          .select('matches_played, matches_won, points')
+          .select('matches_played, matches_won, points, bonus_points')
           .eq('team_id', match.team1_id)
           .eq('league_id', leagueId)
           .single();
 
         const { data: team2CurrentStats } = await supabase
           .from('league_registrations')
-          .select('matches_played, matches_won, points')
+          .select('matches_played, matches_won, points, bonus_points')
           .eq('team_id', match.team2_id)
           .eq('league_id', leagueId)
           .single();
