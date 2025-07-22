@@ -149,14 +149,16 @@ const JoinLeague = () => {
 
     try {
       // Check if team is already registered for this league
-      const { data: existingRegistration } = await supabase
+      const { data: existingRegistrations, error: checkError } = await supabase
         .from('league_registrations')
         .select('id')
         .eq('team_id', team.id)
-        .eq('league_id', selectedLeague)
-        .single();
+        .eq('league_id', selectedLeague);
 
-      if (existingRegistration) {
+      if (checkError) {
+        console.error('Error checking existing registration:', checkError);
+        // Continue with registration attempt - let the database constraints handle duplicates
+      } else if (existingRegistrations && existingRegistrations.length > 0) {
         throw new Error('Your team is already registered for this league');
       }
 
