@@ -198,13 +198,18 @@ const ScoreRecordingModal = ({ isOpen, onClose, match, onScoreRecorded }: ScoreR
 
   // Submit the score
   const handleSubmit = async () => {
+    console.log('🎾 SCORE RECORDING: Starting handleSubmit...');
+    
     const validation = validateSets();
+    console.log('🎾 SCORE RECORDING: Validation result:', validation);
 
     if (!validation.valid) {
+      console.log('🎾 SCORE RECORDING: Validation failed:', validation.error);
       setError(validation.error || 'Invalid score');
       return;
     }
 
+    console.log('🎾 SCORE RECORDING: Validation passed, starting submission...');
     setSubmitting(true);
     setError(null);
 

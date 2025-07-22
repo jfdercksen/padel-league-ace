@@ -1352,6 +1352,7 @@ const ManageLeague = () => {
         .from('league_registrations')
         .update({
           points: 0,
+          bonus_points: 0,
           matches_played: 0,
           matches_won: 0
         })
