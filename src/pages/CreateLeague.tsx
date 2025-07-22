@@ -66,7 +66,8 @@ const CreateLeague = () => {
           venue: formData.venue,
           match_format: formData.matchFormat,
           created_by: profile?.id,
-          status: 'draft'
+          status: 'draft',
+          is_approved: false // Set to false by default, requiring super admin approval
         })
         .select()
         .single();
@@ -125,7 +126,10 @@ const CreateLeague = () => {
               <Trophy className="w-16 h-16 text-green-500 mb-4" />
               <h2 className="text-2xl font-bold text-green-600 mb-2">League Created Successfully!</h2>
               <p className="text-muted-foreground mb-4">
-                Your padel league has been created and is ready for team registrations.
+                Your padel league has been created and is now pending approval from a Super Admin.
+              </p>
+              <p className="text-muted-foreground mb-4">
+                Once approved, your league will be activated and ready for team registrations.
               </p>
               <p className="text-sm text-muted-foreground">
                 Redirecting to leagues page...
