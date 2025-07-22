@@ -34,27 +34,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Helper function to create profile
-  const createProfile = async (user: User, metadata?: any) => {
+  // Helper function to create or update profile
+  const createOrUpdateProfile = async (user: User, metadata?: any) => {
     try {
-      const { data, error } = await supabase
+      // First check if profile exists
+      const { data: existingProfile, error: fetchError } = await supabase
         .from('profiles')
-        .insert({
-          id: user.id,
-          full_name: metadata?.fullName || '',
-          email: user.email || '',
-          phone: metadata?.phone || '',
-          country: metadata?.country || '',
-          role: metadata?.role || 'player',
-          is_approved: metadata?.role === 'league_admin' ? false : true
-        })
-        .select()
+        .select('*')
+        .eq('id', user.id)
         .single();
+      
+      if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "not found"
+        console.error('Error checking for existing profile:', fetchError);
+        return null;
+      }
+      
+      if (existingProfile) {
+        // Profile exists, update it with any new metadata
+        const updates: any = {};
+        if (metadata?.fullName) updates.full_name = metadata.fullName;
+        if (metadata?.phone) updates.phone = metadata.phone;
+        if (metadata?.country) updates.country = metadata.country;
+        if (metadata?.role) updates.role = metadata.role;
+        
+        // Only update if we have changes
+        if (Object.keys(updates).length > 0) {
+          const { data, error } = await supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', user.id)
+            .select()
+            .single();
+            
+          if (error) throw error;
+          return data;
+        }
+        
+        return existingProfile;
+      } else {
+        // Profile doesn't exist, create it
+        const { data, error } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            full_name: metadata?.fullName || '',
+            email: user.email || '',
+            phone: metadata?.phone || '',
+            country: metadata?.country || '',
+            role: metadata?.role || 'player'
+            // Removed is_approved field as it might not exist in the database
+          })
+          .select()
+          .single();
 
-      if (error) throw error;
-      return data;
+        if (error) throw error;
+        return data;
+      }
     } catch (error) {
-      console.error('Error creating profile:', error);
+      console.error('Error creating/updating profile:', error);
       return null;
     }
   };
@@ -81,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
               // Profile doesn't exist, create it from user metadata
               const metadata = session.user.user_metadata;
-              const newProfile = await createProfile(session.user, metadata);
+              const newProfile = await createOrUpdateProfile(session.user, metadata);
               if (newProfile) {
                 setProfile(newProfile);
               }
@@ -120,7 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // If signup successful and user is immediately available (email confirmation disabled)
     if (!error && data.user && data.user.email_confirmed_at) {
       // Create profile immediately
-      const newProfile = await createProfile(data.user, metadata);
+      const newProfile = await createOrUpdateProfile(data.user, metadata);
       if (newProfile) {
         setProfile(newProfile);
       }
