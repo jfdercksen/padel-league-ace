@@ -297,61 +297,69 @@ const ScoreRecordingModal = ({ isOpen, onClose, match, onScoreRecorded }: ScoreR
         // Check for 3-0 win (clean sweep) to award bonus point
         const team1BonusPoint = team1SetWins === 3 && team2SetWins === 0 ? 1 : 0;
         const team2BonusPoint = team2SetWins === 3 && team1SetWins === 0 ? 1 : 0;
-        
+
+        console.log('=== BONUS POINTS DEBUG ===');
+        console.log('team1SetWins:', team1SetWins, 'team2SetWins:', team2SetWins);
+        console.log('team1BonusPoint:', team1BonusPoint, 'team2BonusPoint:', team2BonusPoint);
+
+        // Each score submission = 1 match (regardless of set wins)
         const team1NewStats = {
-          matches_played: (team1CurrentStats?.matches_played || 0) + 1,
-          matches_won: (team1CurrentStats?.matches_won || 0) + (team1SetWins > team2SetWins ? 1 : 0),
-          points: (team1CurrentStats?.points || 0) + (team1SetWins > team2SetWins ? 3 : 1) + team1BonusPoint,
-          bonus_points: (team1CurrentStats?.bonus_points || 0) + team1BonusPoint
+          matches_played: (team1CurrentStats?.matches_played || 0) + 1, // Always +1
+          matches_won: (team1CurrentStats?.matches_won || 0) + (team1SetWins > team2SetWins ? 1 : 0), // +1 if won, +0 if lost
+          points: (team1CurrentStats?.points || 0) + (team1SetWins > team2SetWins ? 3 : 1) + team1BonusPoint, // +3 if won +1 if lost + bonus
+          bonus_points: (team1CurrentStats?.bonus_points || 0) + team1BonusPoint // +1 if 3-0 win
         };
 
         const team2NewStats = {
-          matches_played: (team2CurrentStats?.matches_played || 0) + 1,
-          matches_won: (team2CurrentStats?.matches_won || 0) + (team2SetWins > team1SetWins ? 1 : 0),
-          points: (team2CurrentStats?.points || 0) + (team2SetWins > team1SetWins ? 3 : 1) + team2BonusPoint,
-          bonus_points: (team2CurrentStats?.bonus_points || 0) + team2BonusPoint
+          matches_played: (team2CurrentStats?.matches_played || 0) + 1, // Always +1
+          matches_won: (team2CurrentStats?.matches_won || 0) + (team2SetWins > team1SetWins ? 1 : 0), // +1 if won, +0 if lost  
+          points: (team2CurrentStats?.points || 0) + (team2SetWins > team1SetWins ? 3 : 1) + team2BonusPoint, // +3 if won +1 if lost + bonus
+          bonus_points: (team2CurrentStats?.bonus_points || 0) + team2BonusPoint // +1 if 3-0 win
         };
-
-        console.log('New team 1 stats:', team1NewStats);
-        console.log('New team 2 stats:', team2NewStats);
-
+        
         // Store the calculated stats for immediate UI update
         team1Result = {
           team_id: match.team1_id,
           ...team1NewStats
         };
         
-        team2Result = {
-          team_id: match.team2_id,
-          ...team2NewStats
-        };
+        team2Result = 
 
-        // Update team 1 stats directly
+        console.log('New team 1 stats to update:', team1NewStats);
+        console.log('New team 2 stats to update:', team2NewStats);
+
+        // Update team 1 stats with detailed response
         console.log('Updating team 1 stats...');
-        const { error: team1Error } = await supabase
+        const { data: team1Data, error: team1Error } = await supabase
           .from('league_registrations')
           .update(team1NewStats)
           .eq('team_id', match.team1_id)
-          .eq('league_id', leagueId);
+          .eq('league_id', leagueId)
+          .select(); // THIS IS KEY - shows what was actually updated
+
+        console.log('Team 1 update response:', { data: team1Data, error: team1Error });
 
         if (team1Error) {
-          console.error('Error updating team 1 stats:', team1Error);
+          console.error('DETAILED Team 1 error:', JSON.stringify(team1Error, null, 2));
         } else {
-          console.log('✅ Team 1 stats updated successfully');
+          console.log('✅ Team 1 stats updated successfully. Updated data:', team1Data);
         }
 
-        // Update team 2 stats directly
+        // Update team 2 stats with detailed response  
         console.log('Updating team 2 stats...');
-        const { error: team2Error } = await supabase
+        const { data: team2Data, error: team2Error } = await supabase
           .from('league_registrations')
           .update(team2NewStats)
           .eq('team_id', match.team2_id)
-          .eq('league_id', leagueId);
+          .eq('league_id', leagueId)
+          .select(); // THIS IS KEY - shows what was actually updated
+
+        console.log('Team 2 update response:', { data: team2Data, error: team2Error });
 
         if (team2Error) {
-          console.error('Error updating team 2 stats:', team2Error);
+          console.error('DETAILED Team 2 error:', JSON.stringify(team2Error, null, 2));
         } else {
-          console.log('✅ Team 2 stats updated successfully');
+          console.log('✅ Team 2 stats updated successfully. Updated data:', team2Data);
         }
       } catch (statsError) {
         console.error('Error updating team stats:', statsError);
@@ -396,10 +404,11 @@ const ScoreRecordingModal = ({ isOpen, onClose, match, onScoreRecorded }: ScoreR
       onClose();
 
       // Use a small delay to ensure the modal is closed before reload
-      setTimeout(() => {
-        // Force a complete page reload
-        window.location.reload();
-      }, 500);
+     // Add a longer delay to let the database fully commit the changes
+    setTimeout(() => {
+      console.log('🔄 Reloading page after database commit delay...');
+      window.location.reload();
+    }, 2000); // Increased to 2 seconds
 
       console.log('Page reload scheduled...');
 
