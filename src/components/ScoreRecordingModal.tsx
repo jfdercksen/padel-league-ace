@@ -256,162 +256,27 @@ const ScoreRecordingModal = ({ isOpen, onClose, match, onScoreRecorded }: ScoreR
         throw new Error('No match was updated');
       }
 
-      console.log('✅ Match updated successfully:', updatedMatch[0]);
+      console.log('✅ Score recorded - database triggers will update team stats automatically');
 
       // Get the league ID from the updated match data
       const leagueId = updatedMatch[0]?.league_id || 'unknown';
 
-      // IMPORTANT CHANGE: Update team statistics BEFORE closing modal
-      // This ensures all database operations are complete before UI updates
-      console.log('Updating team statistics...');
-      console.log('Team 1 ID:', match.team1_id);
-      console.log('Team 2 ID:', match.team2_id);
-      console.log('League ID:', leagueId);
-      console.log('Team 1 won:', team1SetWins > team2SetWins);
-      console.log('Team 2 won:', team2SetWins > team1SetWins);
+      
+      console.log('✅ Match updated successfully - database triggers will handle team stats automatically');
 
-      // Define variables outside the try/catch block so they're accessible later
-      let team1Result = null;
-      let team2Result = null;
+// Call the original callback
+onScoreRecorded();
 
-      try {
-        // Get current stats for both teams first
-        const { data: team1CurrentStats } = await supabase
-          .from('league_registrations')
-          .select('matches_played, matches_won, points, bonus_points')
-          .eq('team_id', match.team1_id)
-          .eq('league_id', leagueId)
-          .single();
+// Close modal
+onClose();
 
-        const { data: team2CurrentStats } = await supabase
-          .from('league_registrations')
-          .select('matches_played, matches_won, points, bonus_points')
-          .eq('team_id', match.team2_id)
-          .eq('league_id', leagueId)
-          .single();
+// Simple reload to show fresh data
+setTimeout(() => {
+  console.log('🔄 Reloading page to show updated stats...');
+  window.location.reload();
+}, 1000);
 
-        console.log('Current team 1 stats:', team1CurrentStats);
-        console.log('Current team 2 stats:', team2CurrentStats);
-
-        // Calculate new stats
-        // Check for 3-0 win (clean sweep) to award bonus point
-        const team1BonusPoint = team1SetWins === 3 && team2SetWins === 0 ? 1 : 0;
-        const team2BonusPoint = team2SetWins === 3 && team1SetWins === 0 ? 1 : 0;
-
-        console.log('=== BONUS POINTS DEBUG ===');
-        console.log('team1SetWins:', team1SetWins, 'team2SetWins:', team2SetWins);
-        console.log('team1BonusPoint:', team1BonusPoint, 'team2BonusPoint:', team2BonusPoint);
-
-        // Each score submission = 1 match (regardless of set wins)
-        const team1NewStats = {
-          matches_played: (team1CurrentStats?.matches_played || 0) + 1, // Always +1
-          matches_won: (team1CurrentStats?.matches_won || 0) + (team1SetWins > team2SetWins ? 1 : 0), // +1 if won, +0 if lost
-          points: (team1CurrentStats?.points || 0) + (team1SetWins > team2SetWins ? 3 : 1) + team1BonusPoint, // +3 if won +1 if lost + bonus
-          bonus_points: (team1CurrentStats?.bonus_points || 0) + team1BonusPoint // +1 if 3-0 win
-        };
-
-        const team2NewStats = {
-          matches_played: (team2CurrentStats?.matches_played || 0) + 1, // Always +1
-          matches_won: (team2CurrentStats?.matches_won || 0) + (team2SetWins > team1SetWins ? 1 : 0), // +1 if won, +0 if lost  
-          points: (team2CurrentStats?.points || 0) + (team2SetWins > team1SetWins ? 3 : 1) + team2BonusPoint, // +3 if won +1 if lost + bonus
-          bonus_points: (team2CurrentStats?.bonus_points || 0) + team2BonusPoint // +1 if 3-0 win
-        };
-        
-        // Store the calculated stats for immediate UI update
-        team1Result = {
-          team_id: match.team1_id,
-          ...team1NewStats
-        };
-        
-        team2Result = 
-
-        console.log('New team 1 stats to update:', team1NewStats);
-        console.log('New team 2 stats to update:', team2NewStats);
-
-        // Update team 1 stats with detailed response
-        console.log('Updating team 1 stats...');
-        const { data: team1Data, error: team1Error } = await supabase
-          .from('league_registrations')
-          .update(team1NewStats)
-          .eq('team_id', match.team1_id)
-          .eq('league_id', leagueId)
-          .select(); // THIS IS KEY - shows what was actually updated
-
-        console.log('Team 1 update response:', { data: team1Data, error: team1Error });
-
-        if (team1Error) {
-          console.error('DETAILED Team 1 error:', JSON.stringify(team1Error, null, 2));
-        } else {
-          console.log('✅ Team 1 stats updated successfully. Updated data:', team1Data);
-        }
-
-        // Update team 2 stats with detailed response  
-        console.log('Updating team 2 stats...');
-        const { data: team2Data, error: team2Error } = await supabase
-          .from('league_registrations')
-          .update(team2NewStats)
-          .eq('team_id', match.team2_id)
-          .eq('league_id', leagueId)
-          .select(); // THIS IS KEY - shows what was actually updated
-
-        console.log('Team 2 update response:', { data: team2Data, error: team2Error });
-
-        if (team2Error) {
-          console.error('DETAILED Team 2 error:', JSON.stringify(team2Error, null, 2));
-        } else {
-          console.log('✅ Team 2 stats updated successfully. Updated data:', team2Data);
-        }
-      } catch (statsError) {
-        console.error('Error updating team stats:', statsError);
-      }
-
-      console.log('✅ Score recorded and team stats updated successfully');
-
-      // Trigger all refresh events before closing modal
-      console.log('🏆 Triggering all refresh events');
-      triggerAllRefreshEvents(leagueId);
-
-      // Store updated team stats in localStorage for immediate UI update
-      try {
-        const updatedStats = [
-          { 
-            teamId: match.team1_id, 
-            leagueId, 
-            points: team1Result?.points, 
-            bonus_points: team1Result?.bonus_points,
-            matches_played: team1Result?.matches_played, 
-            matches_won: team1Result?.matches_won 
-          },
-          { 
-            teamId: match.team2_id, 
-            leagueId, 
-            points: team2Result?.points, 
-            bonus_points: team2Result?.bonus_points,
-            matches_played: team2Result?.matches_played, 
-            matches_won: team2Result?.matches_won 
-          }
-        ];
-        localStorage.setItem('updatedTeamStats', JSON.stringify(updatedStats));
-        console.log('✅ Updated team stats stored in localStorage for immediate UI update');
-      } catch (e) {
-        console.error('Error storing team stats in localStorage:', e);
-      }
-
-      // Call the original callback
-      onScoreRecorded();
-
-      // Close modal
-      onClose();
-
-      // Use a small delay to ensure the modal is closed before reload
-     // Add a longer delay to let the database fully commit the changes
-    setTimeout(() => {
-      console.log('🔄 Reloading page after database commit delay...');
-      window.location.reload();
-    }, 2000); // Increased to 2 seconds
-
-      console.log('Page reload scheduled...');
-
+console.log('Page reload scheduled...');
     } catch (error) {
       console.error('Error recording score:', error);
       setError('Failed to record score. Please try again.');
