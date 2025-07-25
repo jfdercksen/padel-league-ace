@@ -266,6 +266,11 @@ const Leaderboard = ({
         if (!directQueryError && directQueryData && directQueryData.length > 0) {
           console.log(`✅ LEADERBOARD: Fetched ${directQueryData.length} team entries via direct query at ${new Date().toLocaleTimeString()}`);
           console.log('📊 LEADERBOARD: First team data from direct query:', directQueryData[0]);
+          console.log('🔍 LEADERBOARD: Raw data with bonus_points:', directQueryData.map(d => ({ 
+            name: d.teams?.name, 
+            points: d.points, 
+            bonus_points: d.bonus_points 
+          })));
 
           // Transform the data to match our expected format
           const processedData = directQueryData.map(entry => ({
