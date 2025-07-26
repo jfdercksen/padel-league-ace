@@ -263,6 +263,12 @@ const Leaderboard = ({
         // Execute the query
         const { data: directQueryData, error: directQueryError } = await directQuery;
 
+        console.log('🔍 LEADERBOARD: Direct query result:', { 
+          error: directQueryError, 
+          dataLength: directQueryData?.length, 
+          hasData: !!directQueryData 
+        });
+
         if (!directQueryError && directQueryData && directQueryData.length > 0) {
           console.log(`✅ LEADERBOARD: Fetched ${directQueryData.length} team entries via direct query at ${new Date().toLocaleTimeString()}`);
           console.log('📊 LEADERBOARD: First team data from direct query:', directQueryData[0]);
