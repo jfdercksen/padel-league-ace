@@ -1,3 +1,4 @@
+// Force deployment - 2025-01-26 19:15
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
