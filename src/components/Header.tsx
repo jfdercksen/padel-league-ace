@@ -1,29 +1,12 @@
-import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Users, 
-  Calendar, 
-  Trophy, 
-  Settings, 
-  LogOut, 
-  Menu, 
-  X,
-  Home
-} from 'lucide-react';
+import { Trophy, LogOut, Home, Users, Calendar, Settings } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 
 const Header = () => {
-  const { profile } = useAuth();
+  const { profile, signOut } = useAuth();
   const location = useLocation();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    setMobileMenuOpen(false);
-  };
 
   const navigationTabs = [
     { path: '/', label: 'Home', icon: Home },
@@ -37,139 +20,98 @@ const Header = () => {
   }
 
   const isActiveTab = (path: string) => {
-    if (path === '/') {
-      return location.pathname === '/';
-    }
+    if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
   };
 
-  const NavLink = ({ tab, mobile = false }: { tab: any; mobile?: boolean }) => {
-    const Icon = tab.icon;
-    const isActive = isActiveTab(tab.path);
-    
-    return (
-      <Link
-        to={tab.path}
-        onClick={() => mobile && setMobileMenuOpen(false)}
-        className={`
-          flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors
-          ${mobile ? 'w-full justify-start' : 'justify-center'}
-          ${isActive 
-            ? 'text-green-600 bg-green-50 border-green-200' 
-            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-          }
-        `}
-      >
-        <Icon className="w-4 h-4" />
-        <span className={mobile ? '' : 'hidden sm:inline'}>{tab.label}</span>
-      </Link>
-    );
+  const handleSignOut = async () => {
+    await signOut();
   };
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
       <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-14 md:h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-3">
+          <Link to="/" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
               <Trophy className="w-5 h-5 text-white" />
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-xl font-bold text-gray-900">Padel League</h1>
-              <p className="text-xs text-gray-500">Tournament Manager</p>
+              <h1 className="text-lg font-bold text-gray-900">Padel League</h1>
             </div>
           </Link>
 
-          {/* Desktop Navigation */}
+          {/* Desktop Navigation - Hidden on mobile */}
           <nav className="hidden md:flex items-center space-x-1">
-            {navigationTabs.map((tab) => (
-              <NavLink key={tab.path} tab={tab} />
-            ))}
+            {navigationTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = isActiveTab(tab.path);
+              return (
+                <Link
+                  key={tab.path}
+                  to={tab.path}
+                  className={`
+                    flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                    ${isActive 
+                      ? 'text-green-600 bg-green-50' 
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }
+                  `}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{tab.label}</span>
+                </Link>
+              );
+            })}
           </nav>
 
-          {/* User Info & Mobile Menu Button */}
-          <div className="flex items-center gap-3">
-            {/* User Info */}
+          {/* User Info */}
+          <div className="flex items-center gap-2">
             {profile && (
-              <div className="hidden sm:flex items-center gap-3">
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">
-                    {profile.full_name}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Badge 
-                      variant="secondary" 
-                      className="text-xs"
-                    >
+              <>
+                {/* Mobile: role badge + quick sign out */}
+                <div className="md:hidden flex items-center gap-2">
+                  <Badge variant="secondary" className="text-xs">
+                    {profile.role === 'super_admin' ? 'Admin' :
+                     profile.role === 'league_admin' ? 'League' : 
+                     'Player'}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSignOut}
+                    className="px-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </Button>
+                </div>
+                
+                {/* Desktop: Full user info */}
+                <div className="hidden md:flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-900">
+                      {profile.full_name}
+                    </p>
+                    <Badge variant="secondary" className="text-xs">
                       {profile.role === 'super_admin' ? 'Super Admin' :
                        profile.role === 'league_admin' ? 'League Admin' : 
                        'Player'}
                     </Badge>
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSignOut}
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign Out
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSignOut}
-                  className="hidden lg:flex"
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
-                </Button>
-              </div>
+              </>
             )}
-
-            {/* Mobile Menu Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden"
-            >
-              {mobileMenuOpen ? (
-                <X className="w-4 h-4" />
-              ) : (
-                <Menu className="w-4 h-4" />
-              )}
-            </Button>
           </div>
         </div>
-
-        {/* Mobile Navigation Menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden border-t border-gray-200 py-4 space-y-2">
-            {/* Mobile Navigation Links */}
-            {navigationTabs.map((tab) => (
-              <NavLink key={tab.path} tab={tab} mobile />
-            ))}
-            
-            {/* Mobile User Info */}
-            {profile && (
-              <div className="pt-4 border-t border-gray-200 space-y-3">
-                <div className="px-3">
-                  <p className="text-sm font-medium text-gray-900">
-                    {profile.full_name}
-                  </p>
-                  <Badge variant="secondary" className="text-xs mt-1">
-                    {profile.role === 'super_admin' ? 'Super Admin' :
-                     profile.role === 'league_admin' ? 'League Admin' : 
-                     'Player'}
-                  </Badge>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSignOut}
-                  className="w-full justify-start"
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </header>
   );

@@ -470,56 +470,48 @@ const Matches = () => {
           </div>
 
         <Tabs defaultValue="pending" className="space-y-6">
-          {/* Mobile-optimized TabsList */}
-          <div className="w-full overflow-x-auto">
-            <TabsList className="grid grid-cols-4 w-full min-w-[500px] sm:min-w-0 gap-1 p-1">
-              <TabsTrigger 
-                value="pending" 
-                className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 min-w-0"
-              >
-                <XCircle className="w-4 h-4 flex-shrink-0" />
-                <span className="hidden sm:inline">Pending</span>
-                <span className="sm:hidden">Pending</span>
-                {pendingConfirmations.length > 0 && (
-                  <Badge variant="destructive" className="ml-1 px-1 py-0 text-xs min-w-[16px] h-4">
-                    {pendingConfirmations.length}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              
-              <TabsTrigger 
-                value="upcoming" 
-                className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 min-w-0"
-              >
-                <Calendar className="w-4 h-4 flex-shrink-0" />
-                <span className="hidden sm:inline">Upcoming</span>
-                <span className="sm:hidden">Upcoming</span>
-                {upcomingMatches.length > 0 && (
-                  <Badge variant="secondary" className="ml-1 px-1 py-0 text-xs min-w-[16px] h-4">
-                    {upcomingMatches.length}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              
-              <TabsTrigger 
-                value="completed" 
-                className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 min-w-0"
-              >
-                <Trophy className="w-4 h-4 flex-shrink-0" />
-                <span className="hidden sm:inline">Completed</span>
-                <span className="sm:hidden">Completed</span>
-              </TabsTrigger>
-              
-              <TabsTrigger 
-                value="all" 
-                className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 min-w-0"
-              >
-                {" "}
-                <span className="hidden sm:inline">All Matches</span>
-                <span className="sm:hidden">All</span>
-              </TabsTrigger>
-            </TabsList>
-          </div>
+          <TabsList className="grid grid-cols-4 w-full gap-1 p-1 bg-muted/50 rounded-lg">
+            <TabsTrigger 
+              value="pending" 
+              className="flex flex-col items-center gap-1 text-xs sm:text-sm px-2 py-2"
+            >
+              <XCircle className="w-4 h-4 flex-shrink-0" />
+              <span>Pending</span>
+              {pendingConfirmations.length > 0 && (
+                <Badge variant="destructive" className="px-1 py-0 text-[10px] min-w-[16px] h-4">
+                  {pendingConfirmations.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            
+            <TabsTrigger 
+              value="upcoming" 
+              className="flex flex-col items-center gap-1 text-xs sm:text-sm px-2 py-2"
+            >
+              <Calendar className="w-4 h-4 flex-shrink-0" />
+              <span>Upcoming</span>
+              {upcomingMatches.length > 0 && (
+                <Badge variant="secondary" className="px-1 py-0 text-[10px] min-w-[16px] h-4">
+                  {upcomingMatches.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            
+            <TabsTrigger 
+              value="completed" 
+              className="flex flex-col items-center gap-1 text-xs sm:text-sm px-2 py-2"
+            >
+              <Trophy className="w-4 h-4 flex-shrink-0" />
+              <span>Completed</span>
+            </TabsTrigger>
+            
+            <TabsTrigger 
+              value="all" 
+              className="flex flex-col items-center gap-1 text-xs sm:text-sm px-2 py-2"
+            >
+              <span>All</span>
+            </TabsTrigger>
+          </TabsList>
 
           {/* Pending Confirmations Tab */}
           <TabsContent value="pending">

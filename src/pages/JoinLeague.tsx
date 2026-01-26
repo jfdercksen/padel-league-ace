@@ -162,14 +162,14 @@ const JoinLeague = () => {
         throw new Error('Your team is already registered for this league');
       }
 
-      // Register team for league with pending status
+      // Register team for league with approved status
       const { error } = await supabase
         .from('league_registrations')
         .insert({
           team_id: team.id,
           league_id: selectedLeague,
           division_id: selectedDivision,
-          status: 'pending' // Explicitly set status to pending
+          status: 'approved' // Explicitly set status to approved
         });
 
       if (error) throw error;
@@ -213,12 +213,12 @@ const JoinLeague = () => {
           <Card className="max-w-2xl mx-auto">
             <CardContent className="flex flex-col items-center justify-center py-8 text-center">
               <Trophy className="w-16 h-16 text-green-500 mb-4" />
-              <h2 className="text-2xl font-bold text-green-600 mb-2">Registration Request Submitted!</h2>
+              <h2 className="text-2xl font-bold text-green-600 mb-2">Successfully Joined League!</h2>
               <p className="text-muted-foreground mb-4">
-                Your team "{team?.name}" registration request has been sent to the league admin for approval.
+                Your team "{team?.name}" has been registered for the league and is ready to compete.
               </p>
               <p className="text-sm text-muted-foreground">
-                You can check the status of your request on the Teams page. Redirecting to teams...
+                Redirecting to teams...
               </p>
             </CardContent>
           </Card>
@@ -261,7 +261,7 @@ const JoinLeague = () => {
             </Button>
             <div>
               <h2 className="text-3xl font-bold">Join League</h2>
-              <p className="text-muted-foreground">Register your team for a padel league</p>
+              <p className="text-muted-foreground">Join a padel league and start competing</p>
             </div>
           </div>
 
@@ -413,7 +413,7 @@ const JoinLeague = () => {
                   ) : (
                     <>
                       <Trophy className="w-4 h-4 mr-2" />
-                      Register Team
+                      Join League
                     </>
                   )}
                 </Button>

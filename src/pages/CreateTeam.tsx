@@ -7,7 +7,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Users, Mail, Loader2, Plus, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { sendTeamInvitationEmail } from '@/utils/emailService';
 import Header from '@/components/Header';
 import { useNavigate } from 'react-router-dom';
 
@@ -42,83 +41,33 @@ const CreateTeam = () => {
         throw new Error('Teammate email is required');
       }
       if (formData.teammateEmail === profile?.email) {
-        throw new Error('You cannot invite yourself to a team');
+        throw new Error('You cannot add yourself to the team.');
       }
 
       // Check if teammate exists in the system
-      const { data: existingUser } = await supabase
+      const { data: existingUser, error: lookupError } = await supabase
         .from('profiles')
         .select('id, full_name, email')
-        .eq('email', formData.teammateEmail.trim())
+        .eq('email', formData.teammateEmail.trim().toLowerCase())
         .single();
 
-      if (existingUser) {
-        // Create team with both players immediately
-        const { data: team, error: teamError } = await supabase
-          .from('teams')
-          .insert({
-            name: formData.teamName.trim(),
-            player1_id: profile?.id,
-            player2_id: existingUser.id,
-            created_by: profile?.id
-          })
-          .select()
-          .single();
-
-        if (teamError) throw teamError;
-        
-        // Send email notification to the existing user who was added to the team
-        try {
-          await sendTeamInvitationEmail(
-            existingUser.email,
-            formData.teamName.trim(),
-            profile?.full_name || 'Team Captain'
-          );
-          console.log('Team addition email sent successfully to existing user');
-        } catch (emailError) {
-          console.error('Failed to send team addition email:', emailError);
-          // Don't throw error here, as the team was created successfully
-        }
-      } else {
-        // Create team with only player1, send invitation for player2
-        const { data: team, error: teamError } = await supabase
-          .from('teams')
-          .insert({
-            name: formData.teamName.trim(),
-            player1_id: profile?.id,
-            player2_id: null, // Will be filled when invitation is accepted
-            created_by: profile?.id
-          })
-          .select()
-          .single();
-
-        if (teamError) throw teamError;
-
-        // Create invitation for non-existing user
-        const { error: inviteError } = await supabase
-          .from('team_invitations')
-          .insert({
-            team_id: team.id,
-            email: formData.teammateEmail.trim(),
-            invited_by: profile?.id,
-            status: 'pending'
-          });
-
-        if (inviteError) throw inviteError;
-        
-        // Send email notification to the invited teammate
-        try {
-          await sendTeamInvitationEmail(
-            formData.teammateEmail.trim(),
-            formData.teamName.trim(),
-            profile?.full_name || 'Team Captain'
-          );
-          console.log('Team invitation email sent successfully');
-        } catch (emailError) {
-          console.error('Failed to send invitation email:', emailError);
-          // Don't throw error here, as the team and invitation were created successfully
-        }
+      if (lookupError || !existingUser) {
+        throw new Error('Teammate not found. They need to create an account first before you can add them to your team.');
       }
+
+      // Create team with both players
+      const { data: team, error: teamError } = await supabase
+        .from('teams')
+        .insert({
+          name: formData.teamName.trim(),
+          player1_id: profile?.id,
+          player2_id: existingUser.id,
+          created_by: profile?.id
+        })
+        .select()
+        .single();
+
+      if (teamError) throw teamError;
 
       setSuccess(true);
       
@@ -225,7 +174,7 @@ const CreateTeam = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="teammateEmail">Teammate Email *</Label>
+                  <Label htmlFor="teammateEmail">Teammate Email (must have an account) *</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -233,13 +182,13 @@ const CreateTeam = () => {
                       type="email"
                       value={formData.teammateEmail}
                       onChange={(e) => handleInputChange('teammateEmail', e.target.value)}
-                      placeholder="teammate@example.com"
+                      placeholder="teammate@example.com (must have an account)"
                       className="pl-10"
                       required
                     />
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Your teammate will be added immediately if they have an account, or invited to join if they need to register first.
+                    Enter your teammate's email address. They must already have an account in the system.
                   </p>
                 </div>
               </CardContent>
@@ -255,6 +204,7 @@ const CreateTeam = () => {
                   <ul className="text-blue-700 text-sm space-y-1">
                     <li>• Each team consists of exactly 2 players</li>
                     <li>• You will be the team captain and can manage the team</li>
+                    <li>• Your teammate must have an account before you can add them</li>
                     <li>• Teams can register for leagues and be assigned to divisions</li>
                     <li>• Both players must be available for scheduled matches</li>
                     <li>• Teams can join multiple leagues simultaneously</li>

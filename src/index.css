@@ -155,3 +155,15 @@
     word-break: break-word;
   }
 }
+
+/* Safe area for mobile devices with notches */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Add padding to main content to account for bottom nav on mobile */
+@media (max-width: 767px) {
+  main, .min-h-screen {
+    padding-bottom: 5rem; /* 80px = nav height + some extra */
+  }
+}

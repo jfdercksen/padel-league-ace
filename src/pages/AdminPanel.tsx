@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import { Link } from 'react-router-dom';
+import { UserManagement } from '@/components/admin/UserManagement';
 
 interface PendingUser {
   id: string;
@@ -125,6 +126,16 @@ const AdminPanel = () => {
             </AlertDescription>
           </Alert>
         )}
+
+        {/* User Management Section */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-6">
+            <Users className="w-6 h-6 text-purple-600" />
+            <h3 className="text-2xl font-bold">User Management</h3>
+            <Badge variant="secondary">Super Admins</Badge>
+          </div>
+          <UserManagement />
+        </div>
 
         {/* Pending Approvals Section */}
         <div className="mb-8">

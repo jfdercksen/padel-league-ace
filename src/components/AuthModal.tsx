@@ -62,7 +62,7 @@ const AuthModal = ({ type, onClose, onSwitchType }: AuthModalProps) => {
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-center text-2xl font-bold">
             {type === 'signin' ? 'Welcome Back' : 'Join Padel League Ace'}

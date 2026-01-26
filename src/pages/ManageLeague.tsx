@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Trophy, Users, Calendar, Settings, Pencil, Trash2, UserPlus, AlertCircle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Trophy, Users, Calendar, Settings, Pencil, Trash2, UserPlus, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
@@ -60,64 +60,67 @@ const LeagueSettingsForm = ({ league, leagueId, onUpdate }: LeagueSettingsFormPr
   const [isDeleteDivisionDialogOpen, setIsDeleteDivisionDialogOpen] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
 
+  const fetchDivisionsAndTeams = useCallback(async () => {
+    setIsLoadingDivisions(true);
+    try {
+      // Fetch divisions
+      const { data: divisionsData, error: divisionsError } = await supabase
+        .from('divisions')
+        .select('id, name, level')
+        .eq('league_id', leagueId)
+        .order('level');
+
+      if (divisionsError) throw divisionsError;
+      setDivisions(divisionsData || []);
+
+      // Fetch teams for checking division assignments
+      const { data: registrations, error: teamsError } = await supabase
+        .from('league_registrations')
+        .select(`
+          id,
+          status,
+          team_id,
+          division_id,
+          team:teams (
+            id,
+            name,
+            player1:profiles!teams_player1_id_fkey (id, full_name),
+            player2:profiles!teams_player2_id_fkey (id, full_name)
+          ),
+          division:divisions (id, name)
+        `)
+        .eq('league_id', leagueId);
+
+      if (teamsError) throw teamsError;
+
+      const transformedTeams = registrations?.map(reg => ({
+        id: reg.team.id,
+        name: reg.team.name,
+        player1: reg.team.player1,
+        player2: reg.team.player2,
+        division: reg.division,
+        registrations: [{ status: reg.status, id: reg.id }]
+      })) || [];
+
+      setTeams(transformedTeams);
+    } catch (error) {
+      console.error('Error fetching divisions or teams:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load divisions. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsLoadingDivisions(false);
+    }
+  }, [leagueId, toast]);
+
   // Fetch divisions and teams when component mounts
   useEffect(() => {
-    const fetchDivisionsAndTeams = async () => {
-      setIsLoadingDivisions(true);
-      try {
-        // Fetch divisions
-        const { data: divisionsData, error: divisionsError } = await supabase
-          .from('divisions')
-          .select('id, name, level')
-          .eq('league_id', leagueId)
-          .order('level');
-
-        if (divisionsError) throw divisionsError;
-        setDivisions(divisionsData || []);
-
-        // Fetch teams for checking division assignments
-        const { data: registrations, error: teamsError } = await supabase
-          .from('league_registrations')
-          .select(`
-            team_id,
-            division_id,
-            team:teams (
-              id,
-              name,
-              player1:profiles!teams_player1_id_fkey (id, full_name),
-              player2:profiles!teams_player2_id_fkey (id, full_name)
-            ),
-            division:divisions (id, name)
-          `)
-          .eq('league_id', leagueId);
-
-        if (teamsError) throw teamsError;
-
-        const transformedTeams = registrations?.map(reg => ({
-          id: reg.team.id,
-          name: reg.team.name,
-          player1: reg.team.player1,
-          player2: reg.team.player2,
-          division: reg.division
-        })) || [];
-
-        setTeams(transformedTeams);
-      } catch (error) {
-        console.error('Error fetching divisions or teams:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load divisions. Please try again.',
-          variant: 'destructive'
-        });
-      } finally {
-        setIsLoadingDivisions(false);
-      }
-    };
-
     if (leagueId) {
       fetchDivisionsAndTeams();
     }
-  }, [leagueId, toast]);
+  }, [leagueId, fetchDivisionsAndTeams]);
 
   // Function to refresh divisions after changes
   const fetchDivisions = async () => {
@@ -695,6 +698,7 @@ const ManageLeague = () => {
     divisionId: ''
   });
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [removingTeamId, setRemovingTeamId] = useState<string | null>(null);
 
   // Match management state
   const [matches, setMatches] = useState<any[]>([]);
@@ -861,6 +865,48 @@ const ManageLeague = () => {
       setProfiles(data || []);
     } catch (error) {
       console.error('Error fetching profiles:', error);
+    }
+  };
+
+  const handleRemoveTeamFromLeague = async (teamId: string, teamName: string) => {
+    if (!leagueId) return;
+
+    if (!confirm(`Are you sure you want to remove "${teamName}" from this league? This will delete their registration and statistics.`)) {
+      return;
+    }
+
+    setRemovingTeamId(teamId);
+
+    try {
+      // Delete the league registration for this team and league
+      const { error } = await supabase
+        .from('league_registrations')
+        .delete()
+        .eq('team_id', teamId)
+        .eq('league_id', leagueId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Team Removed',
+        description: `${teamName} has been removed from the league.`,
+        variant: 'default'
+      });
+
+      if (typeof fetchDivisionsAndTeams === 'function') {
+        fetchDivisionsAndTeams();
+      } else {
+        setTeams(prev => prev.filter(t => t.id !== teamId));
+      }
+    } catch (error: any) {
+      console.error('Error removing team:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to remove team from league',
+        variant: 'destructive'
+      });
+    } finally {
+      setRemovingTeamId(null);
     }
   };
 
@@ -1726,6 +1772,22 @@ const ManageLeague = () => {
                                   >
                                     <Pencil className="w-4 h-4" />
                                     <span className="sr-only">Edit</span>
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => handleRemoveTeamFromLeague(team.id, team.name)}
+                                    disabled={removingTeamId === team.id}
+                                  >
+                                    {removingTeamId === team.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <>
+                                        <Trash2 className="w-4 h-4 mr-1" />
+                                        Remove
+                                      </>
+                                    )}
                                   </Button>
                                   <Button
                                     variant="outline"
