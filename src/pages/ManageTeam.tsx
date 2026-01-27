@@ -477,7 +477,10 @@ const ManageTeam = () => {
 
               {/* Add Player Dialog */}
               <Dialog open={isAddPlayerDialogOpen} onOpenChange={setIsAddPlayerDialogOpen}>
-                <DialogContent className="sm:max-w-[425px]">
+                <DialogContent 
+                  className="sm:max-w-[425px]"
+                  onCloseAutoFocus={(e) => e.preventDefault()}
+                >
                   <DialogHeader>
                     <DialogTitle>Add Player</DialogTitle>
                     <DialogDescription>

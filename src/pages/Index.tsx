@@ -1,712 +1,445 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Trophy, Users, Calendar, TrendingUp, Star, CheckCircle, LogOut, User } from 'lucide-react';
-import AuthModal from '@/components/AuthModal';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAuth } from '@/hooks/useAuth';
-import Header from '@/components/Header';
-import Leaderboard from '@/components/Leaderboard';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { 
+  Trophy, 
+  Calendar, 
+  Users, 
+  ChevronRight,
+  Clock,
+  MapPin,
+  TrendingUp,
+  Star,
+  AlertCircle
+} from 'lucide-react';
 
-const PlayerLeaderboard = ({ userId }: { userId: string }) => {
-  const [playerLeagues, setPlayerLeagues] = useState<any[]>([]);
-  const [selectedLeague, setSelectedLeague] = useState<string>('');
+interface Standing {
+  team_id: string;
+  team_name: string;
+  played: number;
+  won: number;
+  lost: number;
+  points: number;
+  division_name: string;
+  league_name: string;
+}
+
+interface UpcomingMatch {
+  id: string;
+  scheduled_date: string;
+  scheduled_time: string | null;
+  venue: string | null;
+  team1: { name: string };
+  team2: { name: string };
+  league: { name: string };
+  division: { name: string };
+}
+
+interface PendingCount {
+  confirmations: number;
+  matches: number;
+}
+
+export default function Index() {
+  const { profile } = useAuth();
+  const [standings, setStandings] = useState<Standing[]>([]);
+  const [upcomingMatches, setUpcomingMatches] = useState<UpcomingMatch[]>([]);
+  const [pendingCounts, setPendingCounts] = useState<PendingCount>({ confirmations: 0, matches: 0 });
+  const [userTeamIds, setUserTeamIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [leaderboardKey, setLeaderboardKey] = useState(0);
-  const [forceRefresh, setForceRefresh] = useState(0);
 
   useEffect(() => {
-    fetchPlayerLeagues();
-  }, [userId]);
+    if (profile?.id) {
+      fetchDashboardData();
+    }
+  }, [profile?.id]);
 
-  // ENHANCED: Multiple event listeners for maximum compatibility
-  useEffect(() => {
-    let eventCount = 0;
+  const fetchDashboardData = async () => {
+    if (!profile?.id) return;
     
-    const createEventHandler = (eventName: string) => {
-      return (event?: any) => {
-        eventCount++;
-        const timestamp = new Date().toLocaleTimeString();
-        console.log(`🎾 PLAYERLEADERBOARD (${eventName}): Event #${eventCount} received at ${timestamp}`);
-        console.log('Event details:', event?.detail || 'No details');
-        
-        // Multiple refresh strategies
-        setLeaderboardKey(prev => {
-          const newValue = prev + 1;
-          console.log(`🔑 PlayerLeaderboard leaderboardKey changed from ${prev} to ${newValue}`);
-          return newValue;
-        });
-        
-        // Force a second refresh mechanism
-        setForceRefresh(prev => prev + 1);
-      };
-    };
-
-    // Event listener 1: Original scoreRecorded event
-    const scoreRecordedHandler = createEventHandler('scoreRecorded');
-    
-    // Event listener 2: New leaderboardRefresh event
-    const leaderboardRefreshHandler = createEventHandler('leaderboardRefresh');
-    
-    // Event listener 3: Global refresh event
-    const globalRefreshHandler = createEventHandler('globalRefresh');
-
-    console.log('🔧 PLAYERLEADERBOARD: Setting up multiple event listeners...');
-    window.addEventListener('scoreRecorded', scoreRecordedHandler);
-    window.addEventListener('leaderboardRefresh', leaderboardRefreshHandler);
-    window.addEventListener('globalRefresh', globalRefreshHandler);
-    
-    // Register global refresh function for this component
-    (window as any).refreshPlayerLeaderboard = scoreRecordedHandler;
-
-    return () => {
-      console.log('🧹 PLAYERLEADERBOARD: Cleaning up event listeners');
-      window.removeEventListener('scoreRecorded', scoreRecordedHandler);
-      window.removeEventListener('leaderboardRefresh', leaderboardRefreshHandler);
-      window.removeEventListener('globalRefresh', globalRefreshHandler);
-      
-      if ((window as any).refreshPlayerLeaderboard) {
-        delete (window as any).refreshPlayerLeaderboard;
-      }
-    };
-  }, []);
-
-  // Debug useEffect to track all state changes
-  useEffect(() => {
-    console.log('🔑 PlayerLeaderboard state changed:', {
-      leaderboardKey,
-      forceRefresh,
-      selectedLeague,
-      timestamp: new Date().toLocaleTimeString()
-    });
-  }, [leaderboardKey, forceRefresh, selectedLeague]);
-
-  const fetchPlayerLeagues = async () => {
     try {
-      // Get teams where user is a player
-      const { data: userTeams } = await supabase
-        .from('teams')
-        .select('id')
-        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`);
+      // Get user's teams
+      const { data: teamMembers } = await supabase
+        .from('team_members')
+        .select('team_id')
+        .eq('user_id', profile.id);
+      
+      const teamIds = teamMembers?.map(tm => tm.team_id) || [];
+      setUserTeamIds(teamIds);
 
-      if (userTeams && userTeams.length > 0) {
-        const teamIds = userTeams.map(team => team.id);
+      // Get standings for user's divisions
+      if (teamIds.length > 0) {
+        const { data: teams } = await supabase
+          .from('teams')
+          .select('division_id')
+          .in('id', teamIds);
+        
+        const divisionIds = [...new Set(teams?.map(t => t.division_id).filter(Boolean))];
+        
+        if (divisionIds.length > 0) {
+          const { data: standingsData } = await supabase
+            .from('standings')
+            .select(`
+              team_id,
+              played,
+              won,
+              lost,
+              points,
+              team:teams(name, division:divisions(name, league:leagues(name)))
+            `)
+            .in('team:teams.division_id', divisionIds)
+            .order('points', { ascending: false })
+            .limit(10);
 
-        // Get leagues where user's teams are registered
-        const { data: registrations } = await supabase
-          .from('league_registrations')
-          .select('league_id')
-          .in('team_id', teamIds);
-
-        if (registrations && registrations.length > 0) {
-          const leagueIds = registrations.map(reg => reg.league_id);
-
-          // Get league details
-          const { data: leagues } = await supabase
-            .from('leagues')
-            .select('id, name, status')
-            .in('id', leagueIds)
-            .order('created_at', { ascending: false });
-
-          setPlayerLeagues(leagues || []);
-          
-          // Auto-select first active league
-          const activeLeague = leagues?.find(l => l.status === 'active') || leagues?.[0];
-          if (activeLeague) {
-            setSelectedLeague(activeLeague.id);
+          if (standingsData) {
+            const formattedStandings = standingsData.map((s: any) => ({
+              team_id: s.team_id,
+              team_name: s.team?.name || 'Unknown',
+              played: s.played,
+              won: s.won,
+              lost: s.lost,
+              points: s.points,
+              division_name: s.team?.division?.name || '',
+              league_name: s.team?.division?.league?.name || ''
+            }));
+            setStandings(formattedStandings);
           }
         }
       }
+
+      // Get upcoming matches for user's teams
+      if (teamIds.length > 0) {
+        const { data: matchesData } = await supabase
+          .from('matches')
+          .select(`
+            id,
+            scheduled_date,
+            scheduled_time,
+            venue,
+            team1:teams!matches_team1_id_fkey(name),
+            team2:teams!matches_team2_id_fkey(name),
+            league:leagues(name),
+            division:divisions(name)
+          `)
+          .eq('status', 'confirmed')
+          .or(`team1_id.in.(${teamIds.join(',')}),team2_id.in.(${teamIds.join(',')})`)
+          .gte('scheduled_date', new Date().toISOString().split('T')[0])
+          .order('scheduled_date', { ascending: true })
+          .limit(5);
+
+        setUpcomingMatches(matchesData || []);
+      }
+
+      // Get pending confirmations count
+      if (teamIds.length > 0) {
+        const { count: confirmCount } = await supabase
+          .from('match_confirmations')
+          .select('*', { count: 'exact', head: true })
+          .in('team_id', teamIds)
+          .eq('status', 'pending');
+
+        setPendingCounts({
+          confirmations: confirmCount || 0,
+          matches: 0
+        });
+      }
+
     } catch (error) {
-      console.error('Error fetching player leagues:', error);
+      console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // ENHANCED: Manual refresh function for testing
-  const handleManualRefresh = () => {
-    console.log('🔄 PLAYERLEADERBOARD: Manual refresh triggered');
-    setLeaderboardKey(prev => prev + 1);
-    setForceRefresh(prev => prev + 1);
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
   };
 
   if (loading) {
     return (
-      <Card className="hover:shadow-lg transition-shadow">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-primary" />
-            League Standings
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center py-4">
-            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2"></div>
-            <span className="text-sm">Loading standings...</span>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
     );
   }
 
-  if (playerLeagues.length === 0) {
-    return (
-      <Card className="hover:shadow-lg transition-shadow">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-primary" />
-            League Standings
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-6">
-            <TrendingUp className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <h3 className="font-semibold mb-2">No Active Leagues</h3>
-            <p className="text-muted-foreground text-sm mb-4">
-              Join a league to see standings.
+  return (
+    <div className="space-y-4 pb-4">
+      {/* Welcome Header - Compact on mobile */}
+      <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-lg">
+        <h1 className="text-lg font-bold">
+          {getGreeting()}, {profile?.full_name?.split(' ')[0] || 'Player'}! 👋
+        </h1>
+        <p className="text-green-100 text-sm mt-1">
+          Ready to play some padel?
+        </p>
+      </div>
+
+      {/* Action Required Alert */}
+      {pendingCounts.confirmations > 0 && (
+        <Link to="/matches">
+          <Card className="border-orange-200 bg-orange-50 cursor-pointer hover:bg-orange-100 transition-colors">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                    <AlertCircle className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-orange-800">Action Required</p>
+                    <p className="text-sm text-orange-600">
+                      {pendingCounts.confirmations} match{pendingCounts.confirmations !== 1 ? 'es' : ''} need confirmation
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-orange-400" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
+
+      {/* Quick Stats - 2x2 Grid on mobile */}
+      <div className="grid grid-cols-2 gap-3">
+        <Link to="/teams">
+          <Card className="h-full hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 text-center">
+              <Users className="w-6 h-6 mx-auto text-blue-600 mb-2" />
+              <p className="text-2xl font-bold">{userTeamIds.length}</p>
+              <p className="text-xs text-muted-foreground">My Teams</p>
+            </CardContent>
+          </Card>
+        </Link>
+        
+        <Link to="/matches">
+          <Card className="h-full hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 text-center">
+              <Calendar className="w-6 h-6 mx-auto text-green-600 mb-2" />
+              <p className="text-2xl font-bold">{upcomingMatches.length}</p>
+              <p className="text-xs text-muted-foreground">Upcoming</p>
+            </CardContent>
+          </Card>
+        </Link>
+        
+        <Link to="/leagues">
+          <Card className="h-full hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 text-center">
+              <Trophy className="w-6 h-6 mx-auto text-yellow-600 mb-2" />
+              <p className="text-2xl font-bold">
+                {[...new Set(standings.map(s => s.league_name))].length || 0}
+              </p>
+              <p className="text-xs text-muted-foreground">Leagues</p>
+            </CardContent>
+          </Card>
+        </Link>
+        
+        <Card className="h-full">
+          <CardContent className="p-4 text-center">
+            <TrendingUp className="w-6 h-6 mx-auto text-purple-600 mb-2" />
+            <p className="text-2xl font-bold">
+              {standings.find(s => userTeamIds.includes(s.team_id))?.points || 0}
             </p>
-            <Link to="/leagues">
-              <Button variant="outline" size="sm">
-                Browse Leagues
+            <p className="text-xs text-muted-foreground">My Points</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Upcoming Matches - Mobile optimized cards */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Calendar className="w-4 h-4" />
+              Upcoming Matches
+            </CardTitle>
+            <Link to="/matches">
+              <Button variant="ghost" size="sm" className="text-xs h-7 px-2">
+                View All
+                <ChevronRight className="w-3 h-3 ml-1" />
               </Button>
             </Link>
           </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {upcomingMatches.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground">
+              <Calendar className="w-10 h-10 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No upcoming matches</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {upcomingMatches.slice(0, 3).map((match) => (
+                <div 
+                  key={match.id} 
+                  className="p-3 bg-gray-50 rounded-lg space-y-2"
+                >
+                  {/* Teams */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">
+                        {match.team1.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">vs</p>
+                      <p className="font-medium text-sm truncate">
+                        {match.team2.name}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-xs shrink-0 ml-2">
+                      {match.division.name}
+                    </Badge>
+                  </div>
+                  
+                  {/* Date/Time/Venue */}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {new Date(match.scheduled_date).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </span>
+                    {match.scheduled_time && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {match.scheduled_time}
+                      </span>
+                    )}
+                    {match.venue && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {match.venue}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
-    );
-  }
 
-  return (
-    <Card className="hover:shadow-lg transition-shadow md:col-span-2 lg:col-span-3">
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-primary" />
-            League Standings
-            {/* Debug badges */}
-            <Badge variant="outline" className="text-xs">
-              Key: {leaderboardKey}
-            </Badge>
-            <Badge variant="outline" className="text-xs">
-              Refresh: {forceRefresh}
-            </Badge>
-          </CardTitle>
-          
-          <div className="flex gap-2">
-            {playerLeagues.length > 1 && (
-              <Select value={selectedLeague} onValueChange={setSelectedLeague}>
-                <SelectTrigger className="w-full sm:w-64">
-                  <SelectValue placeholder="Select league" />
-                </SelectTrigger>
-                <SelectContent>
-                  {playerLeagues.map((league) => (
-                    <SelectItem key={league.id} value={league.id}>
-                      {league.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            
-            {/* Manual refresh button for testing */}
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleManualRefresh}
-              title="Manual refresh for testing"
-            >
-              🔄
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {selectedLeague ? (
-          <div className="space-y-4">
-            {/* ENHANCED: Multiple ways to force refresh */}
-            <Leaderboard 
-              key={`${selectedLeague}-${leaderboardKey}-${forceRefresh}`} // Composite key
-              leagueId={selectedLeague} 
-              showDivisionFilter={true}
-              maxEntries={undefined} // Show all teams
-              compact={false} // Full leaderboard view
-            />
-            
-            <div className="flex gap-2 pt-4 border-t">
-              <Link to="/standings" className="flex-1">
-                <Button variant="outline" size="sm" className="w-full">
-                  <TrendingUp className="w-4 h-4 mr-2" />
-                  View All Standings
-                </Button>
-              </Link>
-              <Link to="/matches" className="flex-1">
-                <Button variant="outline" size="sm" className="w-full">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  My Matches
-                </Button>
-              </Link>
-              <Button variant="outline" size="sm" onClick={handleManualRefresh}>
-                <TrendingUp className="w-4 h-4 mr-2" />
-                Refresh
+      {/* League Standings - Mobile optimized */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Trophy className="w-4 h-4" />
+              League Standings
+            </CardTitle>
+            <Link to="/leagues">
+              <Button variant="ghost" size="sm" className="text-xs h-7 px-2">
+                Full Table
+                <ChevronRight className="w-3 h-3 ml-1" />
               </Button>
-            </div>
-            
-            {/* Debug info */}
-            <div className="text-xs text-muted-foreground border-t pt-2">
-              <div>League: {selectedLeague}</div>
-              <div>Key: {leaderboardKey} | Force: {forceRefresh}</div>
-              <div>Last update: {new Date().toLocaleTimeString()}</div>
-            </div>
+            </Link>
           </div>
-        ) : (
-          <p className="text-center text-muted-foreground py-4">
-            Select a league to view standings
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-};
-
-const Index = () => {
-  const [authModal, setAuthModal] = useState<'signin' | 'signup' | null>(null);
-  const { user, profile, loading, signOut } = useAuth();
-  const [leaderboardKey, setLeaderboardKey] = useState(0);
-
-  // ENHANCED: Multiple event listeners in main component too
-  useEffect(() => {
-    let eventCount = 0;
-    
-    const createEventHandler = (eventName: string) => {
-      return (event?: any) => {
-        eventCount++;
-        const timestamp = new Date().toLocaleTimeString();
-        console.log(`🎾 MAIN INDEX (${eventName}): Event #${eventCount} received at ${timestamp}`);
-        
-        setLeaderboardKey(prev => {
-          const newValue = prev + 1;
-          console.log(`🔑 Main Index leaderboardKey changed from ${prev} to ${newValue}`);
-          return newValue;
-        });
-      };
-    };
-
-    const scoreRecordedHandler = createEventHandler('scoreRecorded');
-    const leaderboardRefreshHandler = createEventHandler('leaderboardRefresh');
-    const globalRefreshHandler = createEventHandler('globalRefresh');
-    
-    console.log('🔧 MAIN INDEX: Setting up multiple event listeners');
-    window.addEventListener('scoreRecorded', scoreRecordedHandler);
-    window.addEventListener('leaderboardRefresh', leaderboardRefreshHandler);
-    window.addEventListener('globalRefresh', globalRefreshHandler);
-    
-    return () => {
-      console.log('🧹 MAIN INDEX: Cleaning up event listeners');
-      window.removeEventListener('scoreRecorded', scoreRecordedHandler);
-      window.removeEventListener('leaderboardRefresh', leaderboardRefreshHandler);
-      window.removeEventListener('globalRefresh', globalRefreshHandler);
-    };
-  }, []);
-
-  // Close modal when user successfully logs in
-  useEffect(() => {
-    if (user && authModal) {
-      setAuthModal(null);
-    }
-  }, [user, authModal]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-lg text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show dashboard for authenticated users
-  if (user && profile) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        {/* Header */}
-        <Header />
-        {/* Dashboard Content */}
-        <div className="container mx-auto px-4 py-8">
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold mb-2">Welcome back, {profile.full_name}!</h2>
-            <p className="text-muted-foreground">
-              {profile.role === 'super_admin' ? 'You have full system access.' :
-               profile.role === 'league_admin' && !profile.is_approved ? 'Your account is pending approval to create leagues.' :
-               profile.role === 'league_admin' ? 'You can create and manage leagues.' :
-               'Join leagues and form teams to start competing.'}
-            </p>
-          </div>
-
-          {/* Role-specific dashboard cards */}
-          {profile.role === 'super_admin' && (
-            <>
-              <Card className="hover:shadow-lg transition-shadow border-purple-200">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5 text-purple-600" />
-                    Admin Panel
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground mb-4">
-                    Manage users, approve League Administrators, and system settings.
-                  </p>
-                  <Link to="/admin">
-                    <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white">
-                      Open Admin Panel
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-
-              <Card className="hover:shadow-lg transition-shadow border-yellow-200">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-yellow-600" />
-                    Pending Approvals
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground mb-4">
-                    Review and approve League Administrator applications.
-                  </p>
-                  <Link to="/admin">
-                    <Button variant="outline" className="w-full border-yellow-300 text-yellow-700 hover:bg-yellow-50">
-                      Review Applications
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            </>
-          )}
-          
-          <div className="space-y-6">
-            {/* League Standings - shows if user has teams in leagues */}
-            <PlayerLeaderboard key={leaderboardKey} userId={profile.id} />
-
-            {/* Regular dashboard cards */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {profile.role === 'league_admin' && profile.is_approved && (
-                <Card className="hover:shadow-lg transition-shadow">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Trophy className="w-5 h-5 text-primary" />
-                      Create League
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-muted-foreground mb-4">
-                      Set up a new padel league with custom divisions and rules.
-                    </p>
-                    <Link to="/create-league">
-                      <Button className="w-full gradient-padel text-white">
-                        New League
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5 text-primary" />
-                    My Teams
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground mb-4">
-                    View and manage your padel teams.
-                  </p>
-                  <Link to="/teams">
-                    <Button variant="outline" className="w-full">
-                      View Teams
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-
-              <Card className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-primary" />
-                    Upcoming Matches
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground mb-4">
-                    Check your scheduled matches and results.
-                  </p>
-                  <Link to="/matches">
-                    <Button variant="outline" className="w-full">
-                      View Schedule
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-
-              <Card className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Trophy className="w-5 h-5 text-primary" />
-                    Browse Leagues
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground mb-4">
-                    Find and join new padel leagues.
-                  </p>
-                  <Link to="/leagues">
-                    <Button variant="outline" className="w-full">
-                      Browse Leagues
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {standings.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground">
+              <Trophy className="w-10 h-10 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No standings available</p>
+              <p className="text-xs mt-1">Join a league to see standings</p>
             </div>
-          </div>
-
-          {/* Approval notice for league admins */}
-          {profile.role === 'league_admin' && !profile.is_approved && (
-            <Card className="mt-6 border-yellow-200 bg-yellow-50">
-              <CardHeader>
-                <CardTitle className="text-yellow-800">Account Pending Approval</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-yellow-700">
-                  Your League Administrator account is currently pending approval. Once approved by a Super Admin, 
-                  you'll be able to create and manage leagues.
+          ) : (
+            <div className="space-y-1">
+              {/* Compact Header */}
+              <div className="grid grid-cols-12 gap-1 text-xs text-muted-foreground font-medium px-2 py-1">
+                <div className="col-span-1">#</div>
+                <div className="col-span-6">Team</div>
+                <div className="col-span-2 text-center">W-L</div>
+                <div className="col-span-3 text-right">Pts</div>
+              </div>
+              
+              {/* Standings Rows */}
+              {standings.slice(0, 8).map((standing, index) => {
+                const isMyTeam = userTeamIds.includes(standing.team_id);
+                const position = index + 1;
+                
+                return (
+                  <div 
+                    key={standing.team_id}
+                    className={`grid grid-cols-12 gap-1 items-center px-2 py-2 rounded-md text-sm ${
+                      isMyTeam 
+                        ? 'bg-green-50 border border-green-200' 
+                        : index % 2 === 0 ? 'bg-gray-50' : ''
+                    }`}
+                  >
+                    {/* Position */}
+                    <div className="col-span-1">
+                      {position <= 3 ? (
+                        <span className={`font-bold ${
+                          position === 1 ? 'text-yellow-500' :
+                          position === 2 ? 'text-gray-400' :
+                          'text-orange-400'
+                        }`}>
+                          {position === 1 && '🥇'}
+                          {position === 2 && '🥈'}
+                          {position === 3 && '🥉'}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">{position}</span>
+                      )}
+                    </div>
+                    
+                    {/* Team Name */}
+                    <div className="col-span-6 flex items-center gap-1 min-w-0">
+                      <span className={`truncate ${isMyTeam ? 'font-semibold text-green-700' : ''}`}>
+                        {standing.team_name}
+                      </span>
+                      {isMyTeam && <Star className="w-3 h-3 text-green-600 shrink-0" />}
+                    </div>
+                    
+                    {/* Win-Loss */}
+                    <div className="col-span-2 text-center text-xs">
+                      <span className="text-green-600 font-medium">{standing.won}</span>
+                      <span className="text-muted-foreground">-</span>
+                      <span className="text-red-600 font-medium">{standing.lost}</span>
+                    </div>
+                    
+                    {/* Points */}
+                    <div className="col-span-3 text-right">
+                      <span className={`font-bold ${isMyTeam ? 'text-green-700' : ''}`}>
+                        {standing.points}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+              
+              {standings.length > 8 && (
+                <p className="text-center text-xs text-muted-foreground py-2">
+                  +{standings.length - 8} more teams
                 </p>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Show landing page for non-authenticated users
-  const features = [
-    {
-      icon: Trophy,
-      title: "Tournament Management",
-      description: "Create and manage professional padel tournaments with custom divisions and rules."
-    },
-    {
-      icon: Users,
-      title: "Team Formation",
-      description: "Form teams, invite partners, and join multiple leagues with seamless coordination."
-    },
-    {
-      icon: Calendar,
-      title: "Smart Scheduling",
-      description: "Automated match scheduling with flexible rescheduling and conflict resolution."
-    },
-    {
-      icon: TrendingUp,
-      title: "Live Rankings",
-      description: "Real-time standings, statistics, and performance tracking for all participants."
-    }
-  ];
-
-  const userRoles = [
-    {
-      title: "Super Admin",
-      description: "Complete system control with override capabilities",
-      features: ["Manage all accounts", "System-wide settings", "Override restrictions", "Global analytics"],
-      color: "bg-gradient-to-br from-orange-600 to-orange-800"
-    },
-    {
-      title: "League Admin",
-      description: "Create and manage padel leagues and tournaments",
-      features: ["Create leagues", "Manage divisions", "Schedule matches", "Approve registrations"],
-      color: "gradient-padel"
-    },
-    {
-      title: "Player",
-      description: "Join leagues, form teams, and compete",
-      features: ["Join multiple leagues", "Create teams", "Log match results", "View statistics"],
-      color: "bg-gradient-to-br from-amber-500 to-amber-700"
-    }
-  ];
-
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden h-screen flex items-center">
-        {/* Background Image */}
-        <div 
-          className="absolute inset-0 bg-cover bg-center" 
-          style={{ 
-            backgroundImage: 'url("https://plus.unsplash.com/premium_photo-1708692920701-19a470ecd667?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D")',
-            filter: 'brightness(0.7)'
-          }}
-        ></div>
-        
-        {/* Overlay with gradient */}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/70 to-black/40"></div>
-        
-        {/* Content */}
-        <div className="container mx-auto px-4 py-8 md:py-16 relative z-10 text-white">
-          <div className="flex flex-col items-center text-center max-w-4xl mx-auto">
-            <h1 className="text-4xl md:text-6xl font-bold mb-6 text-white drop-shadow-lg">
-              Padel League Ace
-            </h1>
-            
-            <p className="text-lg md:text-xl text-white mb-12 leading-relaxed max-w-2xl drop-shadow-md">
-              The complete platform for managing padel competitions, tournaments, and leagues. 
-              From player registration to championship celebrations.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button 
-                size="lg" 
-                className="gradient-padel text-white hover:opacity-90 transition-opacity px-8 py-4 text-lg shadow-lg"
-                onClick={() => setAuthModal('signup')}
-              >
-                Sign Up as Player
-              </Button>
-              <Button 
-                size="lg" 
-                className="bg-amber-600 hover:bg-amber-700 text-white px-8 py-4 text-lg shadow-lg"
-                onClick={() => setAuthModal('signup')}
-              >
-                Create a League
-              </Button>
-              <Button 
-                size="lg" 
-                className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-4 text-lg shadow-lg"
-                onClick={() => setAuthModal('signin')}
-              >
-                Sign In
-              </Button>
+              )}
             </div>
-          </div>
-        </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 gap-3">
+        <Link to="/teams" className="block">
+          <Button variant="outline" className="w-full h-auto py-3 flex flex-col gap-1">
+            <Users className="w-5 h-5" />
+            <span className="text-xs">My Teams</span>
+          </Button>
+        </Link>
+        <Link to="/matches" className="block">
+          <Button variant="outline" className="w-full h-auto py-3 flex flex-col gap-1">
+            <Calendar className="w-5 h-5" />
+            <span className="text-xs">Matches</span>
+          </Button>
+        </Link>
       </div>
-
-      {/* Features Section */}
-      <section className="py-20 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">Everything You Need</h2>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Comprehensive tools for organizing professional padel competitions
-            </p>
-          </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {features.map((feature, index) => (
-              <Card key={index} className="border-0 shadow-lg hover:shadow-xl transition-shadow bg-card/50 backdrop-blur">
-                <CardHeader className="text-center pb-4">
-                  <div className="w-16 h-16 mx-auto mb-4 gradient-padel rounded-full flex items-center justify-center">
-                    <feature.icon className="w-8 h-8 text-white" />
-                  </div>
-                  <CardTitle className="text-xl">{feature.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground text-center">{feature.description}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* User Roles Section */}
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">Choose Your Role</h2>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Different access levels designed for every type of padel enthusiast
-            </p>
-          </div>
-          <div className="grid md:grid-cols-3 gap-8">
-            {userRoles.map((role, index) => (
-              <Card key={index} className="border-0 shadow-lg hover:shadow-xl transition-all hover:-translate-y-1">
-                <CardHeader>
-                  <div className={`w-full h-32 ${role.color} rounded-lg mb-4 flex items-center justify-center`}>
-                    <Trophy className="w-12 h-12 text-white" />
-                  </div>
-                  <CardTitle className="text-2xl">{role.title}</CardTitle>
-                  <CardDescription className="text-base">{role.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-3">
-                    {role.features.map((feature, featureIndex) => (
-                      <li key={featureIndex} className="flex items-center gap-3">
-                        <CheckCircle className="w-5 h-5 text-primary flex-shrink-0" />
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20 gradient-padel">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-4xl font-bold text-white mb-6">Ready to Get Started?</h2>
-          <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
-            Join thousands of padel players and administrators who trust Padel League Ace
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              size="lg" 
-              className="bg-white text-primary hover:bg-white/90 px-8 py-4 text-lg"
-              onClick={() => setAuthModal('signup')}
-            >
-              Create Account
-            </Button>
-            <Button 
-              size="lg" 
-              className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-4 text-lg"
-              onClick={() => setAuthModal('signin')}
-            >
-              Sign In
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="py-12 border-t">
-        <div className="container mx-auto px-4 text-center">
-          <h3 className="text-2xl font-bold mb-4 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-            Padel League Ace
-          </h3>
-          <p className="text-muted-foreground">
-            The professional choice for padel tournament management
-          </p>
-        </div>
-      </footer>
-
-      {/* Auth Modal */}
-      {authModal && (
-        <AuthModal 
-          type={authModal} 
-          onClose={() => setAuthModal(null)}
-          onSwitchType={(type) => setAuthModal(type)}
-        />
-      )}
     </div>
   );
-};
-
-export default Index;
+}

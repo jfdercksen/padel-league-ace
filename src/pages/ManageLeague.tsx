@@ -1810,7 +1810,10 @@ const ManageLeague = () => {
 
                 {/* Edit Team Dialog */}
                 <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                  <DialogContent className="sm:max-w-md">
+                  <DialogContent 
+                    className="sm:max-w-md"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
                     <DialogHeader>
                       <DialogTitle>Edit Team</DialogTitle>
                       <DialogDescription>
@@ -1894,7 +1897,10 @@ const ManageLeague = () => {
 
                 {/* Delete Team Dialog */}
                 <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                  <DialogContent className="sm:max-w-md">
+                  <DialogContent 
+                    className="sm:max-w-md"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
                     <DialogHeader>
                       <DialogTitle className="flex items-center gap-2 text-destructive">
                         <AlertCircle className="w-5 h-5" />
@@ -1936,7 +1942,10 @@ const ManageLeague = () => {
 
                 {/* Add Team Dialog */}
                 <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                  <DialogContent className="sm:max-w-md">
+                  <DialogContent 
+                    className="sm:max-w-md"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
                     <DialogHeader>
                       <DialogTitle>Add New Team</DialogTitle>
                       <DialogDescription>
@@ -2673,7 +2682,10 @@ const ManageLeague = () => {
 
                 {/* Create Match Dialog */}
                 <Dialog open={isCreateMatchDialogOpen} onOpenChange={setIsCreateMatchDialogOpen}>
-                  <DialogContent className="sm:max-w-md">
+                  <DialogContent 
+                    className="sm:max-w-md"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
                     <DialogHeader>
                       <DialogTitle>Create New Match</DialogTitle>
                       <DialogDescription>
@@ -2818,7 +2830,10 @@ const ManageLeague = () => {
 
                 {/* Edit Match Dialog */}
                 <Dialog open={isEditMatchDialogOpen} onOpenChange={setIsEditMatchDialogOpen}>
-                  <DialogContent className="sm:max-w-md">
+                  <DialogContent 
+                    className="sm:max-w-md"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
                     <DialogHeader>
                       <DialogTitle>Edit Match</DialogTitle>
                       <DialogDescription>
@@ -2961,7 +2976,10 @@ const ManageLeague = () => {
 
                 {/* Delete Match Dialog */}
                 <Dialog open={isDeleteMatchDialogOpen} onOpenChange={setIsDeleteMatchDialogOpen}>
-                  <DialogContent className="sm:max-w-md">
+                  <DialogContent 
+                    className="sm:max-w-md"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
                     <DialogHeader>
                       <DialogTitle className="flex items-center gap-2 text-destructive">
                         <AlertCircle className="w-5 h-5" />
@@ -3001,7 +3019,10 @@ const ManageLeague = () => {
 
                 {/* Generate Division Matches Dialog */}
                 <Dialog open={isGenerateMatchesDialogOpen} onOpenChange={setIsGenerateMatchesDialogOpen}>
-                  <DialogContent className="sm:max-w-md">
+                  <DialogContent 
+                    className="sm:max-w-md"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
                     <DialogHeader>
                       <DialogTitle>Generate Division Matches</DialogTitle>
                       <DialogDescription>
@@ -3054,7 +3075,10 @@ const ManageLeague = () => {
 
                 {/* Clear All Matches Dialog */}
                 <Dialog open={isClearMatchesDialogOpen} onOpenChange={setIsClearMatchesDialogOpen}>
-                  <DialogContent className="sm:max-w-md">
+                  <DialogContent 
+                    className="sm:max-w-md"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
                     <DialogHeader>
                       <DialogTitle className="flex items-center gap-2 text-destructive">
                         <AlertCircle className="w-5 h-5" />
@@ -3105,7 +3129,10 @@ const ManageLeague = () => {
 
                 {/* Bulk Schedule Dialog */}
                 <Dialog open={isBulkScheduleDialogOpen} onOpenChange={setIsBulkScheduleDialogOpen}>
-                  <DialogContent className="sm:max-w-lg">
+                  <DialogContent 
+                    className="sm:max-w-lg"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
                     <DialogHeader>
                       <DialogTitle>Schedule Generated Matches</DialogTitle>
                       <DialogDescription>

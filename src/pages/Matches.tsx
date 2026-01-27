@@ -20,12 +20,24 @@ interface MatchConfirmation {
   team_id: string;
   status: string;
   reschedule_reason?: string | null;
+  responded_at?: string | null;
+  otherTeamConfirmation?: {
+    id: string;
+    status: string;
+    responded_at?: string | null;
+  } | null;
+  otherTeamName?: string;
+  myTeamName?: string;
   match: {
+    id: string;
     scheduled_date: string;
     scheduled_time: string;
     venue: string | null;
-    team1: { name: string };
-    team2: { name: string };
+    status: string;
+    team1_id: string;
+    team2_id: string;
+    team1: { id: string; name: string };
+    team2: { id: string; name: string };
     league: { name: string };
     division: { name: string };
   };
@@ -90,29 +102,77 @@ const Matches = () => {
       return;
     }
 
-    // Get pending confirmations
+    // Get ALL confirmations for user's teams (not just pending)
     const supabaseAny = supabase as any;
-      const { data: confirmations, error: confirmError } = await supabaseAny
-        .from('match_confirmations')
-        .select(`
+    const { data: userConfirmations, error: confirmError } = await supabaseAny
+      .from('match_confirmations')
+      .select(`
+        id,
+        match_id,
+        team_id,
+        status,
+        responded_at,
+        match:matches (
           id,
-          match_id,
-          team_id,
+          scheduled_date,
+          scheduled_time,
+          venue,
           status,
-          match:matches (
-            scheduled_date,
-            scheduled_time,
-            venue,
-            team1:teams!matches_team1_id_fkey(name),
-            team2:teams!matches_team2_id_fkey(name),
-            league:leagues(name),
-            division:divisions(name)
-          )
-        `)
-        .in('team_id', teamIds)
-        .eq('status', 'pending');
+          team1_id,
+          team2_id,
+          team1:teams!matches_team1_id_fkey(id, name),
+          team2:teams!matches_team2_id_fkey(id, name),
+          league:leagues(name),
+          division:divisions(name)
+        )
+      `)
+      .in('team_id', teamIds);
 
-      if (confirmError) throw confirmError;
+    if (confirmError) throw confirmError;
+
+    // For each user confirmation, get the OTHER team's confirmation status
+    const confirmationsWithPartnerStatus = await Promise.all(
+      (userConfirmations || []).map(async (conf: any) => {
+        // Skip if match is already completed or confirmed
+        if (conf.match?.status === 'completed' || conf.match?.status === 'confirmed') {
+          return null;
+        }
+
+        // Determine the other team's ID
+        const otherTeamId = conf.match?.team1_id === conf.team_id 
+          ? conf.match?.team2_id 
+          : conf.match?.team1_id;
+
+        // Fetch the other team's confirmation
+        const { data: otherConfirmation } = await supabaseAny
+          .from('match_confirmations')
+          .select('id, status, responded_at')
+          .eq('match_id', conf.match_id)
+          .eq('team_id', otherTeamId)
+          .single();
+
+        return {
+          ...conf,
+          otherTeamConfirmation: otherConfirmation || null,
+          otherTeamName: conf.match?.team1_id === conf.team_id 
+            ? conf.match?.team2?.name 
+            : conf.match?.team1?.name,
+          myTeamName: conf.match?.team1_id === conf.team_id
+            ? conf.match?.team1?.name
+            : conf.match?.team2?.name
+        };
+      })
+    );
+
+    // Filter: Show confirmations where user hasn't confirmed yet OR is waiting for other team
+    const pendingAndWaiting = confirmationsWithPartnerStatus.filter(conf => {
+      if (!conf) return false;
+      // Show if user's confirmation is still pending
+      if (conf.status === 'pending') return true;
+      // Show if user confirmed but other team hasn't (waiting state)
+      if (conf.status === 'confirmed' && conf.otherTeamConfirmation?.status === 'pending') return true;
+      return false;
+    });
 
       // Clean select fields
       const selectFields = `
@@ -192,7 +252,7 @@ const Matches = () => {
         }))
       });
 
-      setPendingConfirmations(confirmations || []);
+      setPendingConfirmations(pendingAndWaiting);
       setUpcomingMatches(upcoming);
       setCompletedMatches(completed);
       setAllMatches(uniqueMatches);
@@ -203,66 +263,66 @@ const Matches = () => {
     }
   };
 
-    const handleConfirmMatch = async (confirmationId: string) => {
-      setProcessing(confirmationId);
-      try {
-        const supabaseAny = supabase as any;
-        
-        // Step 1: Get the match_id from this confirmation
-        const { data: confirmationData, error: confirmError } = await supabaseAny
-          .from('match_confirmations')
-          .select('match_id')
-          .eq('id', confirmationId)
-          .single();
+  const handleConfirmMatch = async (confirmationId: string) => {
+    setProcessing(confirmationId);
+    try {
+      const supabaseAny = supabase as any;
+      
+      // Step 1: Get the match_id from this confirmation
+      const { data: confirmationData, error: confirmError } = await supabaseAny
+        .from('match_confirmations')
+        .select('match_id')
+        .eq('id', confirmationId)
+        .single();
 
-        if (confirmError) throw confirmError;
+      if (confirmError) throw confirmError;
 
-        // Step 2: Update this team's confirmation status
-        const { data, error } = await supabaseAny
-          .from('match_confirmations')
-          .update({ 
-            status: 'confirmed',
-            responded_at: new Date().toISOString()
-          })
-          .eq('id', confirmationId)
-          .select();
+      // Step 2: Update this team's confirmation status
+      const { data, error } = await supabaseAny
+        .from('match_confirmations')
+        .update({ 
+          status: 'confirmed',
+          responded_at: new Date().toISOString()
+        })
+        .eq('id', confirmationId)
+        .select();
 
-        if (error) throw error;
+      if (error) throw error;
 
-        // Step 3: Check if ALL teams have now confirmed this match
-        const { data: allConfirmations, error: allConfirmError } = await supabaseAny
-          .from('match_confirmations')
-          .select('status')
-          .eq('match_id', confirmationData.match_id);
+      // Step 3: Check if ALL teams have now confirmed this match
+      const { data: allConfirmations, error: allConfirmError } = await supabaseAny
+        .from('match_confirmations')
+        .select('status')
+        .eq('match_id', confirmationData.match_id);
 
-        if (allConfirmError) throw allConfirmError;
+      if (allConfirmError) throw allConfirmError;
 
-        // Step 4: If all teams confirmed, update match status to 'confirmed'
-        const allConfirmed = allConfirmations.every(conf => conf.status === 'confirmed');
-        if (allConfirmed) {
-          console.log('All teams confirmed - updating match status to confirmed');
-          const { error: matchUpdateError } = await supabase
-            .from('matches')
-            .update({ status: 'confirmed' })
-            .eq('id', confirmationData.match_id);
-            
-          if (matchUpdateError) {
-            console.error('Error updating match status:', matchUpdateError);
-          } else {
-            console.log('✅ Match status updated to confirmed');
-          }
+      // Step 4: If all teams confirmed, update match status to 'confirmed'
+      const allConfirmed = allConfirmations.every(conf => conf.status === 'confirmed');
+      if (allConfirmed) {
+        console.log('All teams confirmed - updating match status to confirmed');
+        const { error: matchUpdateError } = await supabase
+          .from('matches')
+          .update({ status: 'confirmed' })
+          .eq('id', confirmationData.match_id);
+          
+        if (matchUpdateError) {
+          console.error('Error updating match status:', matchUpdateError);
+        } else {
+          console.log('✅ Match status updated to confirmed');
         }
-
-        // Step 5: Remove from pending list and refresh data
         setPendingConfirmations(prev => prev.filter(c => c.id !== confirmationId));
-        await fetchMatches(); // Refresh to update upcoming matches
-        
-      } catch (error) {
-        console.error('Error confirming match:', error);
-      } finally {
-        setProcessing(null);
       }
-    };
+
+      // Always refresh to get updated statuses
+      await fetchMatches();
+      
+    } catch (error) {
+      console.error('Error confirming match:', error);
+    } finally {
+      setProcessing(null);
+    }
+  };
 
   const handleRequestReschedule = async (confirmationId: string) => {
     if (!rescheduleForm.reason.trim()) {
@@ -523,104 +583,183 @@ const Matches = () => {
               )
             ) : (
               <div className="space-y-4">
-                {pendingConfirmations.map((confirmation) => (
-                  <Card key={confirmation.id} className="border-l-4 border-l-yellow-500">
-                    <CardContent className="p-6">
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="text-lg font-semibold">
-                              {confirmation.match.team1.name} vs {confirmation.match.team2.name}
-                            </h4>
-                            <p className="text-sm text-muted-foreground">
-                              {confirmation.match.league.name} • {confirmation.match.division.name}
-                            </p>
-                          </div>
-                          <Badge className="bg-yellow-100 text-yellow-800">Pending Confirmation</Badge>
-                        </div>
-
-                        {/* Match Details */}
-                        <div className="bg-blue-50 p-4 rounded-lg">
-                          <div className="grid md:grid-cols-3 gap-3">
-                            <div className="flex items-center gap-2">
-                              <Calendar className="w-4 h-4 text-blue-600" />
-                              <span className="text-sm">
-                                {new Date(confirmation.match.scheduled_date).toLocaleDateString()}
-                              </span>
+                {pendingConfirmations.map((confirmation) => {
+                  const userHasAccepted = confirmation.status === 'confirmed';
+                  const otherTeamHasAccepted = confirmation.otherTeamConfirmation?.status === 'confirmed';
+                  const isWaitingForOther = userHasAccepted && !otherTeamHasAccepted;
+                  return (
+                    <Card
+                      key={confirmation.id}
+                      className={`border-l-4 ${isWaitingForOther ? 'border-l-blue-500 bg-blue-50/30' : 'border-l-yellow-500'}`}
+                    >
+                      <CardContent className="p-4 sm:p-6">
+                        <div className="space-y-4">
+                          {/* Header */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <h4 className="text-lg font-semibold">
+                                {confirmation.match.team1.name} vs {confirmation.match.team2.name}
+                              </h4>
+                              <p className="text-sm text-muted-foreground">
+                                {confirmation.match.league.name} • {confirmation.match.division.name}
+                              </p>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Clock className="w-4 h-4 text-blue-600" />
-                              <span className="text-sm">{confirmation.match.scheduled_time}</span>
-                            </div>
-                            {confirmation.match.venue && (
-                              <div className="flex items-center gap-2">
-                                <MapPin className="w-4 h-4 text-blue-600" />
-                                <span className="text-sm">{confirmation.match.venue}</span>
-                              </div>
+                            {/* Status Badge */}
+                            {isWaitingForOther ? (
+                              <Badge className="bg-blue-100 text-blue-800 w-fit">
+                                <Clock className="w-3 h-3 mr-1" />
+                                Waiting for {confirmation.otherTeamName}
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-yellow-100 text-yellow-800 w-fit">
+                                Pending Your Confirmation
+                              </Badge>
                             )}
                           </div>
-                        </div>
 
-                        {/* Reschedule Form */}
-                        {showRescheduleForm === confirmation.id ? (
-                          <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-                            <Label htmlFor={`reason-${confirmation.id}`}>Reason for Rescheduling *</Label>
-                            <Textarea
-                              id={`reason-${confirmation.id}`}
-                              value={rescheduleForm.reason}
-                              onChange={(e) => setRescheduleForm(prev => ({ ...prev, reason: e.target.value }))}
-                              placeholder="Please explain why you need to reschedule this match..."
-                              rows={3}
-                            />
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => handleRequestReschedule(confirmation.id)}
-                                disabled={processing === confirmation.id || !rescheduleForm.reason.trim()}
-                              >
-                                <MessageSquare className="w-4 h-4 mr-2" />
-                                Submit Request
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setShowRescheduleForm(null);
-                                  setRescheduleForm({ confirmationId: '', reason: '' });
-                                }}
-                              >
-                                Cancel
-                              </Button>                              
+                          {/* Acceptance Status Indicators */}
+                          <div className="flex gap-4 p-3 bg-gray-50 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              {confirmation.myTeamName === confirmation.match.team1.name ? (
+                                <>
+                                  <div className={`w-3 h-3 rounded-full ${userHasAccepted ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                  <span className="text-sm">{confirmation.match.team1.name}</span>
+                                  {userHasAccepted && <CheckCircle className="w-4 h-4 text-green-500" />}
+                                </>
+                              ) : (
+                                <>
+                                  <div className={`w-3 h-3 rounded-full ${otherTeamHasAccepted ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                  <span className="text-sm">{confirmation.match.team1.name}</span>
+                                  {otherTeamHasAccepted && <CheckCircle className="w-4 h-4 text-green-500" />}
+                                </>
+                              )}
+                            </div>
+                            <span className="text-muted-foreground">vs</span>
+                            <div className="flex items-center gap-2">
+                              {confirmation.myTeamName === confirmation.match.team2.name ? (
+                                <>
+                                  <div className={`w-3 h-3 rounded-full ${userHasAccepted ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                  <span className="text-sm">{confirmation.match.team2.name}</span>
+                                  {userHasAccepted && <CheckCircle className="w-4 h-4 text-green-500" />}
+                                </>
+                              ) : (
+                                <>
+                                  <div className={`w-3 h-3 rounded-full ${otherTeamHasAccepted ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                  <span className="text-sm">{confirmation.match.team2.name}</span>
+                                  {otherTeamHasAccepted && <CheckCircle className="w-4 h-4 text-green-500" />}
+                                </>
+                              )}
                             </div>
                           </div>
-                        ) : (
-                          /* Action Buttons */
-                          <div className="flex gap-3">
-                            <Button
-                              onClick={() => handleConfirmMatch(confirmation.id)}
-                              disabled={processing === confirmation.id}
-                              className="bg-green-600 hover:bg-green-700"
-                            >
-                              <CheckCircle className="w-4 h-4 mr-2" />
-                              Accept Time
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={() => {
-                                setShowRescheduleForm(confirmation.id);
-                                setRescheduleForm({ confirmationId: confirmation.id, reason: '' });
-                              }}
-                              disabled={processing === confirmation.id}
-                            >
-                              <XCircle className="w-4 h-4 mr-2" />
-                              Reschedule
-                            </Button>
+
+                          {/* Match Details */}
+                          <div className="bg-blue-50 p-4 rounded-lg">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="w-4 h-4 text-blue-600" />
+                                <span className="text-sm">
+                                  {new Date(confirmation.match.scheduled_date).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-blue-600" />
+                                <span className="text-sm">{confirmation.match.scheduled_time || 'TBD'}</span>
+                              </div>
+                              {confirmation.match.venue && (
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="w-4 h-4 text-blue-600" />
+                                  <span className="text-sm">{confirmation.match.venue}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+
+                          {/* Other team accepted message */}
+                          {otherTeamHasAccepted && !userHasAccepted && (
+                            <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg text-green-700">
+                              <CheckCircle className="w-5 h-5" />
+                              <span className="text-sm font-medium">
+                                {confirmation.otherTeamName} has already accepted this match!
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Waiting message after user accepts */}
+                          {isWaitingForOther && (
+                            <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg text-blue-700">
+                              <Clock className="w-5 h-5 animate-pulse" />
+                              <span className="text-sm font-medium">
+                                You've accepted! Waiting for {confirmation.otherTeamName} to confirm...
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Reschedule Form */}
+                          {showRescheduleForm === confirmation.id ? (
+                            <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                              <Label htmlFor={`reason-${confirmation.id}`}>Reason for Rescheduling *</Label>
+                              <Textarea
+                                id={`reason-${confirmation.id}`}
+                                value={rescheduleForm.reason}
+                                onChange={(e) => setRescheduleForm(prev => ({ ...prev, reason: e.target.value }))}
+                                placeholder="Please explain why you need to reschedule this match..."
+                                rows={3}
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleRequestReschedule(confirmation.id)}
+                                  disabled={processing === confirmation.id || !rescheduleForm.reason.trim()}
+                                >
+                                  <MessageSquare className="w-4 h-4 mr-2" />
+                                  Submit Request
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setShowRescheduleForm(null);
+                                    setRescheduleForm({ confirmationId: '', reason: '' });
+                                  }}
+                                >
+                                  Cancel
+                                </Button>                              
+                              </div>
+                            </div>
+                          ) : !isWaitingForOther && (
+                            /* Action Buttons - Only show if user hasn't accepted yet */
+                            <div className="flex flex-col sm:flex-row gap-3">
+                              <Button
+                                onClick={() => handleConfirmMatch(confirmation.id)}
+                                disabled={processing === confirmation.id}
+                                className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none"
+                              >
+                                {processing === confirmation.id ? (
+                                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                                ) : (
+                                  <CheckCircle className="w-4 h-4 mr-2" />
+                                )}
+                                Accept Match
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setShowRescheduleForm(confirmation.id);
+                                  setRescheduleForm({ confirmationId: confirmation.id, reason: '' });
+                                }}
+                                disabled={processing === confirmation.id}
+                                className="flex-1 sm:flex-none"
+                              >
+                                <XCircle className="w-4 h-4 mr-2" />
+                                Request Reschedule
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </TabsContent>

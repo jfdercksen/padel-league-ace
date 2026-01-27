@@ -14,6 +14,7 @@ import CreateTeam from "./pages/CreateTeam";
 import JoinLeague from "./pages/JoinLeague";
 import ManageTeam from "./pages/ManageTeam";
 import Standings from "./pages/Standings";
+import Profile from "./pages/Profile";
 import BottomNav from "./components/BottomNav";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/join-league/:teamId" element={<JoinLeague />} />
             <Route path="/manage-team/:teamId" element={<ManageTeam />} />
             <Route path="/standings" element={<Standings />} />
+            <Route path="/profile" element={<Profile />} />
           </Routes>
           <BottomNav />
         </BrowserRouter>

@@ -1,21 +1,21 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Users, Calendar, Trophy, Settings } from 'lucide-react';
+import { Home, Users, Calendar, Trophy, User } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 const BottomNav = () => {
   const { profile } = useAuth();
   const location = useLocation();
 
+  // Don't show bottom nav if user is not logged in
+  if (!profile) return null;
+
   const navItems = [
     { path: '/', label: 'Home', icon: Home },
     { path: '/teams', label: 'Teams', icon: Users },
     { path: '/matches', label: 'Matches', icon: Calendar },
     { path: '/leagues', label: 'Leagues', icon: Trophy },
+    { path: '/profile', label: 'Profile', icon: User },
   ];
-
-  if (profile?.role === 'super_admin') {
-    navItems.push({ path: '/admin', label: 'Admin', icon: Settings });
-  }
 
   const isActive = (path: string) => {
     if (path === '/') {
@@ -26,7 +26,7 @@ const BottomNav = () => {
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 safe-area-bottom">
-      <div className="flex items-center justify-around h-16 px-2">
+      <div className="flex items-center justify-around h-16 px-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
@@ -36,7 +36,7 @@ const BottomNav = () => {
               key={item.path}
               to={item.path}
               className={`
-                flex flex-col items-center justify-center flex-1 h-full py-2 px-1
+                flex flex-col items-center justify-center flex-1 h-full py-2 px-1 relative
                 transition-colors duration-200
                 ${active 
                   ? 'text-green-600' 
@@ -44,8 +44,8 @@ const BottomNav = () => {
                 }
               `}
             >
-              <Icon className={`w-6 h-6 ${active ? 'stroke-[2.5px]' : ''}`} />
-              <span className={`text-xs mt-1 ${active ? 'font-semibold' : 'font-medium'}`}>
+              <Icon className={`w-5 h-5 ${active ? 'stroke-[2.5px]' : ''}`} />
+              <span className={`text-[10px] mt-1 ${active ? 'font-semibold' : 'font-medium'}`}>
                 {item.label}
               </span>
               {active && (
