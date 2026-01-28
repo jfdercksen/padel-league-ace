@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Users, CheckCircle, XCircle, Mail, Calendar, Shield, Trophy, Pencil, Eye, AlertCircle, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import Header from '@/components/Header';
 import { Link } from 'react-router-dom';
 import { UserManagement } from '@/components/admin/UserManagement';
 
@@ -33,7 +32,7 @@ const AdminPanel = () => {
 
   // Redirect if not super admin
   useEffect(() => {
-    if (profile && profile.role !== 'super_admin') {
+    if (profile && profile.role !== 'super_admin' && profile.role !== 'league_admin') {
       window.location.href = '/';
     }
   }, [profile]);
@@ -88,36 +87,42 @@ const AdminPanel = () => {
     }
   };
 
-  if (profile?.role !== 'super_admin') {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8 text-center">
-          <h2 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h2>
-          <p className="text-muted-foreground">You need Super Admin privileges to access this page.</p>
-        </div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!profile || (profile.role !== 'super_admin' && profile.role !== 'league_admin')) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-xl font-bold">Access Denied</h2>
+        <p className="text-muted-foreground">You need admin privileges to access this page.</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-      <Header />
-      
-      {/* Content */}
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <Shield className="w-8 h-8 text-purple-600" />
-            <h2 className="text-3xl font-bold">Super Admin Panel</h2>
-            <Badge className="bg-purple-100 text-purple-800 border-purple-200">
-              System Administrator
-            </Badge>
-          </div>
-          <p className="text-muted-foreground">
-            Manage League Administrator approvals and system oversight.
-          </p>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">Admin Panel</h1>
+        <p className="text-muted-foreground">Manage users, leagues, and system settings</p>
+      </div>
+
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-4">
+          <Shield className="w-8 h-8 text-purple-600" />
+          <h2 className="text-3xl font-bold">Super Admin Panel</h2>
+          <Badge className="bg-purple-100 text-purple-800 border-purple-200">
+            System Administrator
+          </Badge>
         </div>
+        <p className="text-muted-foreground">
+          Manage League Administrator approvals and system oversight.
+        </p>
+      </div>
 
         {message && (
           <Alert className={`mb-6 ${message.includes('Error') ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
@@ -286,7 +291,6 @@ const AdminPanel = () => {
             </CardContent>
           </Card>
         </div>
-      </div>
     </div>
   );
 };

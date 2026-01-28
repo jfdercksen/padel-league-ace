@@ -6,7 +6,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import Header from '@/components/Header';
 import { Users, Plus, Trophy, Calendar, Mail, Clock, MapPin, CheckCircle, XCircle, MessageSquare } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -352,22 +351,6 @@ const Teams = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center py-8">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-lg text-muted-foreground">Loading teams...</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const handleConfirmationResponse = async (confirmationId: string, response: 'accepted' | 'postpone_requested', notes?: string) => {
     setProcessingConfirmation(confirmationId);
 
@@ -412,41 +395,46 @@ const Teams = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-      <Header />
-
-      {/* Content */}
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h2 className="text-3xl font-bold mb-2">My Teams</h2>
-              <p className="text-muted-foreground">
-                Manage your padel teams and partnerships
-              </p>
-            </div>
-            {profile?.role === 'player' && (
-              <Link to="/create-team">
-                <Button className="gradient-padel text-white flex items-center gap-2">
-                  <Plus className="w-4 h-4" />
-                  Create Team
-                </Button>
-              </Link>
-            )}
-          </div>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-lg text-muted-foreground">Loading teams...</p>
         </div>
+      </div>
+    );
+  }
 
-        {message && (
-          <Alert className={`mb-6 ${message.includes('Error') ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
-            <AlertDescription className={message.includes('Error') ? 'text-red-700' : 'text-green-700'}>
-              {message}
-            </AlertDescription>
-          </Alert>
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-3xl font-bold mb-2">My Teams</h2>
+          <p className="text-muted-foreground">
+            Manage your padel teams and partnerships
+          </p>
+        </div>
+        {profile?.role === 'player' && (
+          <Link to="/create-team">
+            <Button className="gradient-padel text-white flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              Create Team
+            </Button>
+          </Link>
         )}
+      </div>
 
-        {/* Pending Invitations */}
-        {invitations.length > 0 && (
+      {message && (
+        <Alert className={`mb-6 ${message.includes('Error') ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+          <AlertDescription className={message.includes('Error') ? 'text-red-700' : 'text-green-700'}>
+            {message}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Pending Invitations */}
+      {invitations.length > 0 && (
           <div className="mb-8">
             <h3 className="text-xl font-bold mb-4">Team Invitations</h3>
             <div className="space-y-4">
@@ -794,9 +782,6 @@ const Teams = () => {
             </Card>
           </div>
         )}
-      </div>
-      {/* Add this section before the final closing </div> in the main content area */}
-
       {/* Match Confirmations Section */}
       {matchConfirmations.length > 0 && (
         <Card className="mb-6">

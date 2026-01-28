@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar, Clock, MapPin, Trophy, CheckCircle, XCircle, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import Header from '@/components/Header';
 import ScoreRecordingModal from '@/components/ScoreRecordingModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -79,6 +79,8 @@ const Matches = () => {
   useEffect(() => {
     if (profile) {
       fetchMatches();
+    } else {
+      setLoading(false);
     }
   }, [profile]);
 
@@ -130,7 +132,7 @@ const Matches = () => {
 
     if (confirmError) throw confirmError;
 
-    // For each user confirmation, get the OTHER team's confirmation status
+    // For each user confirmation, get the OTHER team's confirmation status using RPC
     const confirmationsWithPartnerStatus = await Promise.all(
       (userConfirmations || []).map(async (conf: any) => {
         // Skip if match is already completed or confirmed
@@ -138,28 +140,40 @@ const Matches = () => {
           return null;
         }
 
-        // Determine the other team's ID
-        const otherTeamId = conf.match?.team1_id === conf.team_id 
-          ? conf.match?.team2_id 
-          : conf.match?.team1_id;
+        // Use RPC to get all confirmations for this match (bypasses RLS)
+        const { data: allMatchConfirmations, error: rpcError } = await (supabase as any).rpc(
+          'get_match_confirmations_status',
+          { p_match_id: conf.match_id }
+        );
 
-        // Fetch the other team's confirmation
-        const { data: otherConfirmation } = await supabaseAny
-          .from('match_confirmations')
-          .select('id, status, responded_at')
-          .eq('match_id', conf.match_id)
-          .eq('team_id', otherTeamId)
-          .single();
+        if (rpcError) {
+          console.error('Error fetching match confirmations:', rpcError);
+          return null;
+        }
+
+        // Find the other team's confirmation
+        const otherConfirmation = (allMatchConfirmations || []).find(
+          (mc: any) => mc.team_id !== conf.team_id
+        );
+
+        // Find my team's name from the confirmations or match data
+        const myTeamName = conf.match?.team1_id === conf.team_id
+          ? conf.match?.team1?.name
+          : conf.match?.team2?.name;
+
+        const otherTeamName = conf.match?.team1_id === conf.team_id
+          ? conf.match?.team2?.name
+          : conf.match?.team1?.name;
 
         return {
           ...conf,
-          otherTeamConfirmation: otherConfirmation || null,
-          otherTeamName: conf.match?.team1_id === conf.team_id 
-            ? conf.match?.team2?.name 
-            : conf.match?.team1?.name,
-          myTeamName: conf.match?.team1_id === conf.team_id
-            ? conf.match?.team1?.name
-            : conf.match?.team2?.name
+          otherTeamConfirmation: otherConfirmation ? {
+            id: otherConfirmation.confirmation_id,
+            status: otherConfirmation.status,
+            responded_at: otherConfirmation.responded_at
+          } : null,
+          otherTeamName,
+          myTeamName
         };
       })
     );
@@ -252,6 +266,13 @@ const Matches = () => {
         }))
       });
 
+      console.log('🔍 Debug - pendingAndWaiting:', pendingAndWaiting.map(c => ({
+        id: c?.id,
+        myTeam: c?.myTeamName,
+        myStatus: c?.status,
+        otherTeam: c?.otherTeamName,
+        otherStatus: c?.otherTeamConfirmation?.status
+      })));
       setPendingConfirmations(pendingAndWaiting);
       setUpcomingMatches(upcoming);
       setCompletedMatches(completed);
@@ -266,55 +287,32 @@ const Matches = () => {
   const handleConfirmMatch = async (confirmationId: string) => {
     setProcessing(confirmationId);
     try {
+      // Call the RPC function that handles confirmation with proper permissions
       const supabaseAny = supabase as any;
-      
-      // Step 1: Get the match_id from this confirmation
-      const { data: confirmationData, error: confirmError } = await supabaseAny
-        .from('match_confirmations')
-        .select('match_id')
-        .eq('id', confirmationId)
-        .single();
+      const { data, error } = await supabaseAny.rpc('confirm_match_for_team', {
+        p_confirmation_id: confirmationId,
+        p_user_id: profile?.id
+      });
 
-      if (confirmError) throw confirmError;
-
-      // Step 2: Update this team's confirmation status
-      const { data, error } = await supabaseAny
-        .from('match_confirmations')
-        .update({ 
-          status: 'confirmed',
-          responded_at: new Date().toISOString()
-        })
-        .eq('id', confirmationId)
-        .select();
-
-      if (error) throw error;
-
-      // Step 3: Check if ALL teams have now confirmed this match
-      const { data: allConfirmations, error: allConfirmError } = await supabaseAny
-        .from('match_confirmations')
-        .select('status')
-        .eq('match_id', confirmationData.match_id);
-
-      if (allConfirmError) throw allConfirmError;
-
-      // Step 4: If all teams confirmed, update match status to 'confirmed'
-      const allConfirmed = allConfirmations.every(conf => conf.status === 'confirmed');
-      if (allConfirmed) {
-        console.log('All teams confirmed - updating match status to confirmed');
-        const { error: matchUpdateError } = await supabase
-          .from('matches')
-          .update({ status: 'confirmed' })
-          .eq('id', confirmationData.match_id);
-          
-        if (matchUpdateError) {
-          console.error('Error updating match status:', matchUpdateError);
-        } else {
-          console.log('✅ Match status updated to confirmed');
-        }
-        setPendingConfirmations(prev => prev.filter(c => c.id !== confirmationId));
+      if (error) {
+        console.error('Error confirming match:', error);
+        throw error;
       }
 
-      // Always refresh to get updated statuses
+      console.log('Confirmation result:', data);
+
+      const result = data as any;
+      if (result?.success) {
+        if (result.all_confirmed) {
+          console.log('✅ All teams confirmed - match is now confirmed');
+        } else {
+          console.log(`⏳ Waiting for other team (${result.confirmed_count}/${result.total_count} confirmed)`);
+        }
+      } else {
+        console.error('Confirmation failed:', result?.message);
+      }
+
+      // Refresh the matches list
       await fetchMatches();
       
     } catch (error) {
@@ -501,33 +499,40 @@ const Matches = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8">
-          <Card>
-            <CardContent className="flex items-center justify-center py-8">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                <span>Loading matches...</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+      <div className="flex items-center justify-center min-h-[50vh] px-4">
+        <Card>
+          <CardContent className="flex items-center justify-center py-8">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              <span>Loading matches...</span>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background flex items-center justify-center px-4">
+        <div className="text-center space-y-3">
+          <h2 className="text-xl font-bold">Please sign in</h2>
+          <p className="text-muted-foreground text-sm">You need an account to view matches.</p>
+          <Link to="/">
+            <Button size="sm">Go to Home</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        
-        <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
-          <div className="mb-6 sm:mb-8">
-            <h2 className="text-2xl sm:text-3xl font-bold mb-2">Your Matches</h2>
-            <p className="text-sm sm:text-base text-muted-foreground">
-              Track your upcoming games and match history
-            </p>
-          </div>
+    <div className="space-y-6">
+        <div className="mb-6 sm:mb-8">
+          <h2 className="text-2xl sm:text-3xl font-bold mb-2">Your Matches</h2>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Track your upcoming games and match history
+          </p>
+        </div>
 
         <Tabs defaultValue="pending" className="space-y-6">
           <TabsList className="grid grid-cols-4 w-full gap-1 p-1 bg-muted/50 rounded-lg">
@@ -822,7 +827,6 @@ const Matches = () => {
             }}
           />
       </div>
-    </div>
   );
 };
 

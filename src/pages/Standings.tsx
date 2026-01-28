@@ -1,13 +1,23 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { TrendingUp, Trophy, Users, ArrowLeft, Settings } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  TrendingUp, 
+  Trophy, 
+  Users, 
+  Calendar,
+  RefreshCw,
+  Star,
+  Clock,
+  MapPin
+} from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import Header from '@/components/Header';
-import Leaderboard from '@/components/Leaderboard'; // Import the component we just created
+import Leaderboard from '@/components/Leaderboard';
 
 interface League {
   id: string;
@@ -18,120 +28,93 @@ interface League {
   status: string;
 }
 
+interface Match {
+  id: string;
+  scheduled_date: string;
+  scheduled_time: string | null;
+  venue: string | null;
+  status: string;
+  team1_score: number | null;
+  team2_score: number | null;
+  team1: { id: string; name: string };
+  team2: { id: string; name: string };
+  division: { name: string };
+}
+
 const Standings = () => {
   const { profile } = useAuth();
+  const [searchParams] = useSearchParams();
   const [leagues, setLeagues] = useState<League[]>([]);
   const [selectedLeague, setSelectedLeague] = useState<string>('');
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [userTeamIds, setUserTeamIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState('standings');
 
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  // Get league ID from URL params
+  useEffect(() => {
+    const leagueIdFromUrl = searchParams.get('leagueId');
+    if (leagueIdFromUrl) {
+      setSelectedLeague(leagueIdFromUrl);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
-    fetchLeagues();
+    if (profile?.id) {
+      fetchLeagues();
+      fetchUserTeams();
+    }
+  if (!profile) {
+    setLoading(false);
+  }
+  }, [profile?.id]);
 
-    // Check URL parameters for refresh and leagueId
-    const urlParams = new URLSearchParams(window.location.search);
-    const refresh = urlParams.get('refresh');
-    const leagueId = urlParams.get('leagueId');
+  useEffect(() => {
+    if (selectedLeague) {
+      fetchMatches();
+    }
+  }, [selectedLeague]);
 
-    if (refresh && leagueId) {
-      console.log('🏆 STANDINGS: Detected navigation with refresh parameter');
+  // Listen for score recording events
+  useEffect(() => {
+    const handleRefresh = () => {
+      console.log('🏆 STANDINGS: Refresh event received');
+      handleManualRefresh();
+    };
 
-      // Auto-select the league from the URL parameter
-      setSelectedLeague(leagueId);
+    window.addEventListener('scoreRecorded', handleRefresh);
+    window.addEventListener('leaderboardRefresh', handleRefresh);
+    
+    return () => {
+      window.removeEventListener('scoreRecorded', handleRefresh);
+      window.removeEventListener('leaderboardRefresh', handleRefresh);
+    };
+  }, [selectedLeague]);
 
-      // Force a refresh of the data immediately
-      console.log('🔄 STANDINGS: Forcing refresh from URL parameters');
-      fetchLeagues(); // Fetch leagues again
-      setRefreshTrigger(prev => prev + 1); // Trigger a refresh
+  const fetchUserTeams = async () => {
+    if (!profile?.id) return;
+    
+    const { data, error } = await supabase
+      .from('teams')
+      .select('id')
+      .or(`player1_id.eq.${profile.id},player2_id.eq.${profile.id}`);
 
-      // Force a page reload after a short delay to ensure fresh data
-      setTimeout(() => {
-        console.log('🔄 STANDINGS: Forcing page reload for fresh data');
-        // Remove the refresh parameter to prevent infinite reload
-        const newUrl = window.location.pathname + '?leagueId=' + leagueId;
-        window.history.replaceState({}, '', newUrl);
-        window.location.reload();
-      }, 1000);
-
+    if (error) {
+      console.error('Error fetching user teams:', error);
       return;
     }
-
-    // Check localStorage for lastUpdatedLeagueId
-    const lastUpdatedLeagueId = localStorage.getItem('lastUpdatedLeagueId');
-    const forceRefreshTimestamp = localStorage.getItem('forceRefreshTimestamp');
-
-    if (lastUpdatedLeagueId) {
-      console.log('🏆 STANDINGS: Detected navigation from match result recording');
-
-      // Clear the flags
-      localStorage.removeItem('lastUpdatedLeagueId');
-      localStorage.removeItem('forceRefreshTimestamp');
-
-      // Auto-select the league from the match result
-      setSelectedLeague(lastUpdatedLeagueId);
-
-      // Force a refresh of the data immediately
-      console.log('🔄 STANDINGS: Forcing refresh after match result');
-      fetchLeagues(); // Fetch leagues again
-      setRefreshTrigger(prev => prev + 1); // Trigger a refresh
-
-      // Add a manual refresh button
-      const refreshButton = document.createElement('button');
-      refreshButton.innerText = 'Refresh Standings';
-      refreshButton.className = 'fixed top-4 right-4 bg-amber-500 text-white px-4 py-2 rounded shadow-lg z-50';
-      refreshButton.onclick = () => window.location.reload();
-      document.body.appendChild(refreshButton);
-
-      // Remove the button after 10 seconds
-      setTimeout(() => {
-        if (document.body.contains(refreshButton)) {
-          document.body.removeChild(refreshButton);
-        }
-      }, 10000);
-    }
-  }, [profile, refreshTrigger]);
-
-  // Listen for score recording events to refresh standings
-  useEffect(() => {
-    const handleScoreRecorded = () => {
-      console.log('🏆 STANDINGS: Score recorded event received - triggering refresh...');
-      setRefreshTrigger(prev => prev + 1);
-    };
-
-    const handleLeaderboardRefresh = () => {
-      console.log('🏆 STANDINGS: Leaderboard refresh event received - triggering refresh...');
-      setRefreshTrigger(prev => prev + 1);
-    };
-
-    const handleGlobalRefresh = () => {
-      console.log('🏆 STANDINGS: Global refresh event received - triggering refresh...');
-      setRefreshTrigger(prev => prev + 1);
-    };
-
-    // Set up all event listeners
-    console.log('🔧 STANDINGS: Setting up refresh event listeners');
-    window.addEventListener('scoreRecorded', handleScoreRecorded);
-    window.addEventListener('leaderboardRefresh', handleLeaderboardRefresh);
-    window.addEventListener('globalRefresh', handleGlobalRefresh);
-
-    return () => {
-      console.log('🔧 STANDINGS: Removing refresh event listeners');
-      window.removeEventListener('scoreRecorded', handleScoreRecorded);
-      window.removeEventListener('leaderboardRefresh', handleLeaderboardRefresh);
-      window.removeEventListener('globalRefresh', handleGlobalRefresh);
-    };
-  }, []);
+    
+    setUserTeamIds(data?.map(team => team.id) || []);
+  };
 
   const fetchLeagues = async () => {
     if (!profile) return;
 
-    setLoading(true);
     try {
       let leagueData: League[] = [];
 
       if (profile.role === 'league_admin' || profile.role === 'super_admin') {
-        // Admins can see all leagues
         const { data, error } = await supabase
           .from('leagues')
           .select('id, name, description, start_date, end_date, status')
@@ -140,15 +123,15 @@ const Standings = () => {
         if (error) throw error;
         leagueData = data || [];
       } else {
-        // Players can only see leagues their teams are registered for
-        const { data: userTeams, error: teamsError } = await supabase
+        // Players see leagues their teams are in
+        const { data: teamsData, error: teamsError } = await supabase
           .from('teams')
           .select('id')
           .or(`player1_id.eq.${profile.id},player2_id.eq.${profile.id}`);
 
         if (teamsError) throw teamsError;
 
-        const teamIds = userTeams?.map(team => team.id) || [];
+        const teamIds = teamsData?.map(team => team.id) || [];
 
         if (teamIds.length > 0) {
           const { data: registrations, error: regError } = await supabase
@@ -158,13 +141,13 @@ const Standings = () => {
 
           if (regError) throw regError;
 
-          const registeredLeagueIds = registrations?.map(reg => reg.league_id) || [];
+          const leagueIds = [...new Set(registrations?.map(r => r.league_id) || [])];
 
-          if (registeredLeagueIds.length > 0) {
+          if (leagueIds.length > 0) {
             const { data, error } = await supabase
               .from('leagues')
               .select('id, name, description, start_date, end_date, status')
-              .in('id', registeredLeagueIds)
+              .in('id', leagueIds)
               .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -175,7 +158,7 @@ const Standings = () => {
 
       setLeagues(leagueData);
 
-      // Auto-select first league if available
+      // Auto-select first league if none selected
       if (leagueData.length > 0 && !selectedLeague) {
         setSelectedLeague(leagueData[0].id);
       }
@@ -186,254 +169,353 @@ const Standings = () => {
     }
   };
 
+  const fetchMatches = async () => {
+    if (!selectedLeague) return;
+
+    try {
+      const { data } = await supabase
+        .from('matches')
+        .select(`
+          id,
+          scheduled_date,
+          scheduled_time,
+          venue,
+          status,
+          team1_score,
+          team2_score,
+          team1:teams!matches_team1_id_fkey(id, name),
+          team2:teams!matches_team2_id_fkey(id, name),
+          division:divisions(name)
+        `)
+        .eq('league_id', selectedLeague)
+        .in('status', ['confirmed', 'completed'])
+        .order('scheduled_date', { ascending: false })
+        .limit(20);
+
+      setMatches(data || []);
+    } catch (error) {
+      console.error('Error fetching matches:', error);
+    }
+  };
+
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    await fetchLeagues();
+    await fetchMatches();
+    // Dispatch event for Leaderboard component
+    window.dispatchEvent(new Event('leaderboardRefresh'));
+    setTimeout(() => setRefreshing(false), 500);
+  };
+
   const selectedLeagueData = leagues.find(league => league.id === selectedLeague);
+  const upcomingMatches = matches.filter(m => m.status === 'confirmed');
+  const completedMatches = matches.filter(m => m.status === 'completed');
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center py-16">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-lg text-muted-foreground">Loading standings...</p>
-            </div>
-          </div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background flex items-center justify-center px-4">
+        <div className="text-center space-y-3">
+          <h2 className="text-xl font-bold">Please sign in</h2>
+          <p className="text-muted-foreground text-sm">You need an account to view standings.</p>
+          <Link to="/">
+            <Button size="sm">Go to Home</Button>
+          </Link>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-      <Header />
+    <div className="space-y-4 pb-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Standings
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            League rankings & results
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleManualRefresh}
+          disabled={refreshing}
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+        </Button>
+      </div>
 
-      <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        {/* Header Section */}
-        <div className="mb-6 sm:mb-8">
-          <div className="flex items-center gap-4 mb-4">
-            <Link to="/">
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back
+      {/* League Selector */}
+      {leagues.length > 0 && (
+        <Card>
+          <CardContent className="p-3">
+            <Select value={selectedLeague} onValueChange={setSelectedLeague}>
+              <SelectTrigger className="w-full">
+                <div className="flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-yellow-500" />
+                  <SelectValue placeholder="Select a league" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {leagues.map((league) => (
+                  <SelectItem key={league.id} value={league.id}>
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">{league.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {league.status === 'active' ? '🟢 Active' : 
+                         league.status === 'upcoming' ? '🟡 Upcoming' : '⚫ Ended'}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* No Leagues State */}
+      {leagues.length === 0 && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Trophy className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No Leagues Available</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              {profile?.role === 'player'
+                ? "Join a team in a league to see standings"
+                : "Create a league to get started"
+              }
+            </p>
+            <Link to="/leagues">
+              <Button>
+                <Users className="w-4 h-4 mr-2" />
+                Browse Leagues
               </Button>
             </Link>
-            <div>
-              <div className="flex justify-between items-center">
-                <h2 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
-                  <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8" />
-                  League Standings
-                </h2>
-                <Button
-                  onClick={() => {
-                    console.log('🔄 STANDINGS: Manual refresh triggered');
-                    window.location.reload();
-                  }}
-                  variant="outline"
-                  size="sm"
-                  className="bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-300"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-2">
-                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
-                    <path d="M21 3v5h-5"></path>
-                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
-                    <path d="M8 16H3v5"></path>
-                  </svg>
-                  Refresh Data
-                </Button>
-              </div>
-              <p className="text-sm sm:text-base text-muted-foreground">
-                View live rankings and team performance across all leagues
-              </p>
-            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Main Content */}
+      {selectedLeague && selectedLeagueData && (
+        <>
+          {/* League Info Badge */}
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" className="text-xs">
+              <Calendar className="w-3 h-3 mr-1" />
+              {new Date(selectedLeagueData.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(selectedLeagueData.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </Badge>
+            <Badge 
+              variant="outline" 
+              className={`text-xs ${
+                selectedLeagueData.status === 'active' ? 'bg-green-50 text-green-700 border-green-200' :
+                selectedLeagueData.status === 'upcoming' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                'bg-gray-50 text-gray-700'
+              }`}
+            >
+              {selectedLeagueData.status === 'active' ? 'Active' :
+               selectedLeagueData.status === 'upcoming' ? 'Upcoming' : 'Completed'}
+            </Badge>
+            {(profile?.role === 'super_admin' || profile?.role === 'league_admin') && (
+              <Link to={`/leagues/${selectedLeague}/manage`}>
+                <Badge variant="outline" className="text-xs cursor-pointer hover:bg-gray-100">
+                  ⚙️ Manage
+                </Badge>
+              </Link>
+            )}
           </div>
 
-          {/* League Selector */}
-          {leagues.length > 1 && (
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-              <label className="text-sm font-medium">Select League:</label>
-              <Select value={selectedLeague} onValueChange={setSelectedLeague}>
-                <SelectTrigger className="w-full sm:w-80">
-                  <SelectValue placeholder="Choose a league" />
-                </SelectTrigger>
-                <SelectContent>
-                  {leagues.map((league) => (
-                    <SelectItem key={league.id} value={league.id}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{league.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(league.start_date).toLocaleDateString()} - {new Date(league.end_date).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          {/* Tabs for Standings / Upcoming / Results */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="standings" className="text-xs sm:text-sm">
+                <Trophy className="w-4 h-4 mr-1 hidden sm:inline" />
+                Standings
+              </TabsTrigger>
+              <TabsTrigger value="upcoming" className="text-xs sm:text-sm">
+                <Calendar className="w-4 h-4 mr-1 hidden sm:inline" />
+                Upcoming
+              </TabsTrigger>
+              <TabsTrigger value="results" className="text-xs sm:text-sm">
+                <Star className="w-4 h-4 mr-1 hidden sm:inline" />
+                Results
+              </TabsTrigger>
+            </TabsList>
 
-          {/* Selected League Info */}
-          {selectedLeagueData && (
-            <Card className="mt-4">
-              <CardContent className="pt-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h3 className="text-lg font-semibold">{selectedLeagueData.name}</h3>
-                    {selectedLeagueData.description && (
-                      <p className="text-muted-foreground text-sm mt-1">
-                        {selectedLeagueData.description}
-                      </p>
-                    )}
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Season: {new Date(selectedLeagueData.start_date).toLocaleDateString()} - {new Date(selectedLeagueData.end_date).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Trophy className="w-5 h-5 text-yellow-500" />
-                    <span className="text-sm font-medium">
-                      {selectedLeagueData.status === 'active' ? 'Active Season' :
-                        selectedLeagueData.status === 'upcoming' ? 'Upcoming Season' :
-                          'Season Ended'}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+            {/* Standings Tab */}
+            <TabsContent value="standings" className="mt-4">
+              <Leaderboard
+                leagueId={selectedLeague}
+                showDivisionFilter={true}
+              />
+            </TabsContent>
 
-        {/* Main Content */}
-        {leagues.length === 0 ? (
-          <Card>
-            <CardContent className="py-16">
-              <div className="text-center">
-                <Users className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-xl font-semibold mb-2">No Leagues Available</h3>
-                <p className="text-muted-foreground mb-6">
-                  {profile?.role === 'player'
-                    ? "You haven't joined any leagues yet. Join a league to see standings!"
-                    : "No leagues have been created yet. Create your first league to get started!"
-                  }
-                </p>
-                {profile?.role === 'league_admin' && profile.is_approved && (
-                  <Link to="/create-league">
-                    <Button>
-                      <Trophy className="w-4 h-4 mr-2" />
-                      Create League
-                    </Button>
-                  </Link>
-                )}
-                {profile?.role === 'player' && (
-                  <Link to="/leagues">
-                    <Button>
-                      <Users className="w-4 h-4 mr-2" />
-                      Browse Leagues
-                    </Button>
-                  </Link>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ) : selectedLeague ? (
-          <div className="space-y-6">
-            {/* Main Leaderboard */}
-            <Leaderboard
-              leagueId={selectedLeague}
-              showDivisionFilter={true}
-            />
-
-            {/* Additional Stats Cards */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Upcoming Matches Tab */}
+            <TabsContent value="upcoming" className="mt-4">
               <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Trophy className="w-4 h-4" />
-                    Top Performers
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Leaderboard
-                    leagueId={selectedLeague}
-                    showDivisionFilter={false}
-                    maxEntries={3}
-                    compact={true}
-                  />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Users className="w-4 h-4" />
-                    Quick Actions
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Link to="/matches" className="block">
-                    <Button variant="outline" className="w-full justify-start">
-                      View Matches
-                    </Button>
-                  </Link>
-                  <Link to="/teams" className="block">
-                    <Button variant="outline" className="w-full justify-start">
-                      My Teams
-                    </Button>
-                  </Link>
-                  {(profile?.role === 'league_admin' || profile?.role === 'super_admin') && (
-                    <Link to={`/manage-league/${selectedLeague}`} className="block">
-                      <Button variant="outline" className="w-full justify-start bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300">
-                        <Settings className="w-4 h-4 mr-2" />
-                        Manage League
-                      </Button>
-                    </Link>
+                <CardContent className="pt-4">
+                  {upcomingMatches.length === 0 ? (
+                    <div className="py-8 text-center text-muted-foreground">
+                      <Calendar className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No upcoming matches</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {upcomingMatches.map((match) => {
+                        const isMyMatch = userTeamIds.includes(match.team1.id) || userTeamIds.includes(match.team2.id);
+                        
+                        return (
+                          <div 
+                            key={match.id}
+                            className={`p-3 rounded-lg border ${
+                              isMyMatch ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-100'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <Badge variant="outline" className="text-xs">
+                                {match.division.name}
+                              </Badge>
+                              {isMyMatch && (
+                                <Badge className="bg-green-100 text-green-700 text-xs">
+                                  <Star className="w-3 h-3 mr-1" />
+                                  Your Match
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <p className={`font-medium text-sm ${
+                                userTeamIds.includes(match.team1.id) ? 'text-green-700' : ''
+                              }`}>
+                                {match.team1.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">vs</p>
+                              <p className={`font-medium text-sm ${
+                                userTeamIds.includes(match.team2.id) ? 'text-green-700' : ''
+                              }`}>
+                                {match.team2.name}
+                              </p>
+                            </div>
+                            
+                            <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                {new Date(match.scheduled_date).toLocaleDateString('en-US', {
+                                  weekday: 'short',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}
+                              </span>
+                              {match.scheduled_time && (
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {match.scheduled_time}
+                                </span>
+                              )}
+                              {match.venue && (
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="w-3 h-3" />
+                                  {match.venue}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
 
+            {/* Results Tab */}
+            <TabsContent value="results" className="mt-4">
               <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <TrendingUp className="w-4 h-4" />
-                    Season Info
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Status:</span>
-                    <span className="font-medium capitalize">{selectedLeagueData?.status}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Started:</span>
-                    <span className="font-medium">
-                      {selectedLeagueData ? new Date(selectedLeagueData.start_date).toLocaleDateString() : '-'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Ends:</span>
-                    <span className="font-medium">
-                      {selectedLeagueData ? new Date(selectedLeagueData.end_date).toLocaleDateString() : '-'}
-                    </span>
-                  </div>
+                <CardContent className="pt-4">
+                  {completedMatches.length === 0 ? (
+                    <div className="py-8 text-center text-muted-foreground">
+                      <Star className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No completed matches yet</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {completedMatches.map((match) => {
+                        const isMyMatch = userTeamIds.includes(match.team1.id) || userTeamIds.includes(match.team2.id);
+                        const team1Won = (match.team1_score || 0) > (match.team2_score || 0);
+                        const team2Won = (match.team2_score || 0) > (match.team1_score || 0);
+                        
+                        return (
+                          <div 
+                            key={match.id}
+                            className={`p-3 rounded-lg border ${
+                              isMyMatch ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-100'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <Badge variant="outline" className="text-xs">
+                                {match.division.name}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(match.scheduled_date).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}
+                              </span>
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className={`text-sm flex-1 truncate ${
+                                  team1Won ? 'font-semibold' : ''
+                                } ${userTeamIds.includes(match.team1.id) ? 'text-green-700' : ''}`}>
+                                  {match.team1.name}
+                                  {team1Won && ' 🏆'}
+                                </span>
+                                <span className={`text-lg font-bold ml-2 ${
+                                  team1Won ? 'text-green-600' : 'text-muted-foreground'
+                                }`}>
+                                  {match.team1_score ?? '-'}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className={`text-sm flex-1 truncate ${
+                                  team2Won ? 'font-semibold' : ''
+                                } ${userTeamIds.includes(match.team2.id) ? 'text-green-700' : ''}`}>
+                                  {match.team2.name}
+                                  {team2Won && ' 🏆'}
+                                </span>
+                                <span className={`text-lg font-bold ml-2 ${
+                                  team2Won ? 'text-green-600' : 'text-muted-foreground'
+                                }`}>
+                                  {match.team2_score ?? '-'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            </div>
-          </div>
-        ) : (
-          <Card>
-            <CardContent className="py-16">
-              <div className="text-center">
-                <TrendingUp className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-xl font-semibold mb-2">Select a League</h3>
-                <p className="text-muted-foreground">
-                  Choose a league from the dropdown above to view its standings.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+            </TabsContent>
+          </Tabs>
+        </>
+      )}
     </div>
   );
 };
 
 export default Standings;
+

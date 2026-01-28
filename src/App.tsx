@@ -15,7 +15,7 @@ import JoinLeague from "./pages/JoinLeague";
 import ManageTeam from "./pages/ManageTeam";
 import Standings from "./pages/Standings";
 import Profile from "./pages/Profile";
-import BottomNav from "./components/BottomNav";
+import Layout from "./components/Layout";
 
 const queryClient = new QueryClient();
 
@@ -25,21 +25,22 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/teams" element={<Teams />} />
-            <Route path="/matches" element={<Matches />} />
-            <Route path="/leagues" element={<Leagues />} />
-            <Route path="/admin" element={<AdminPanel />} />
-            <Route path="/create-league" element={<CreateLeague />} />
-            <Route path="/manage-league/:leagueId" element={<ManageLeague />} />
-            <Route path="/create-team" element={<CreateTeam />} />
-            <Route path="/join-league/:teamId" element={<JoinLeague />} />
-            <Route path="/manage-team/:teamId" element={<ManageTeam />} />
-            <Route path="/standings" element={<Standings />} />
-            <Route path="/profile" element={<Profile />} />
-          </Routes>
-          <BottomNav />
+          <Layout>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/teams" element={<Teams />} />
+              <Route path="/matches" element={<Matches />} />
+              <Route path="/leagues" element={<Leagues />} />
+              <Route path="/admin" element={<AdminPanel />} />
+              <Route path="/create-league" element={<CreateLeague />} />
+              <Route path="/manage-league/:leagueId" element={<ManageLeague />} />
+              <Route path="/create-team" element={<CreateTeam />} />
+              <Route path="/join-league/:teamId" element={<JoinLeague />} />
+              <Route path="/manage-team/:teamId" element={<ManageTeam />} />
+              <Route path="/standings" element={<Standings />} />
+              <Route path="/profile" element={<Profile />} />
+            </Routes>
+          </Layout>
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>

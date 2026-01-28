@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Trophy, Users, Calendar, MapPin, DollarSign, ArrowLeft, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import Header from '@/components/Header';
 
 interface Team {
   id: string;
@@ -191,15 +190,10 @@ const JoinLeague = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center py-8">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-lg text-muted-foreground">Loading leagues...</p>
-            </div>
-          </div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-lg text-muted-foreground">Loading leagues...</p>
         </div>
       </div>
     );
@@ -207,63 +201,54 @@ const JoinLeague = () => {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8">
-          <Card className="max-w-2xl mx-auto">
-            <CardContent className="flex flex-col items-center justify-center py-8 text-center">
-              <Trophy className="w-16 h-16 text-green-500 mb-4" />
-              <h2 className="text-2xl font-bold text-green-600 mb-2">Successfully Joined League!</h2>
-              <p className="text-muted-foreground mb-4">
-                Your team "{team?.name}" has been registered for the league and is ready to compete.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Redirecting to teams...
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+      <div className="space-y-6">
+        <Card className="max-w-2xl mx-auto">
+          <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+            <Trophy className="w-16 h-16 text-green-500 mb-4" />
+            <h2 className="text-2xl font-bold text-green-600 mb-2">Successfully Joined League!</h2>
+            <p className="text-muted-foreground mb-4">
+              Your team "{team?.name}" has been registered for the league and is ready to compete.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Redirecting to teams...
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   if (!team) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8 text-center">
-          <h2 className="text-2xl font-bold text-red-600 mb-4">Team Not Found</h2>
-          <p className="text-muted-foreground mb-4">The team you're looking for doesn't exist or you don't have access to it.</p>
-          <Button onClick={() => navigate('/teams')}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Teams
-          </Button>
-        </div>
+      <div className="text-center space-y-4">
+        <h2 className="text-2xl font-bold text-red-600">Team Not Found</h2>
+        <p className="text-muted-foreground">The team you're looking for doesn't exist or you don't have access to it.</p>
+        <Button onClick={() => navigate('/teams')}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Teams
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-      <Header />
-
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-3xl mx-auto">
-          {/* Header */}
-          <div className="flex items-center gap-4 mb-8">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate('/teams')}
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Teams
-            </Button>
-            <div>
-              <h2 className="text-3xl font-bold">Join League</h2>
-              <p className="text-muted-foreground">Join a padel league and start competing</p>
-            </div>
+    <div className="space-y-6">
+      <div className="max-w-3xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-8">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/teams')}
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Teams
+          </Button>
+          <div>
+            <h2 className="text-3xl font-bold">Join League</h2>
+            <p className="text-muted-foreground">Join a padel league and start competing</p>
           </div>
+        </div>
 
           {error && (
             <Alert className="mb-6 border-red-200 bg-red-50">
@@ -420,7 +405,6 @@ const JoinLeague = () => {
               </div>
             </>
           )}
-        </div>
       </div>
     </div>
   );

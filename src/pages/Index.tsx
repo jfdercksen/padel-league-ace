@@ -5,6 +5,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Trophy, 
   Calendar, 
@@ -14,7 +17,12 @@ import {
   MapPin,
   TrendingUp,
   Star,
-  AlertCircle
+  AlertCircle,
+  LogIn,
+  UserPlus,
+  Mail,
+  Lock,
+  User
 } from 'lucide-react';
 
 interface Standing {
@@ -44,6 +52,234 @@ interface PendingCount {
   matches: number;
 }
 
+function AuthUI() {
+  const [authTab, setAuthTab] = useState<'signin' | 'signup'>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authMessage, setAuthMessage] = useState<string | null>(null);
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError(null);
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+      // Auth state change handled by useAuth hook
+    } catch (error: any) {
+      setAuthError(error.message || 'Failed to sign in');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError(null);
+
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+        },
+      });
+
+      if (error) throw error;
+      setAuthMessage('Check your email to confirm your account!');
+      setAuthTab('signin');
+    } catch (error: any) {
+      setAuthError(error.message || 'Failed to sign up');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-b from-green-50 to-white">
+      <div className="w-full max-w-md">
+        {/* Logo/Header */}
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Trophy className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">Padel League</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage your padel leagues and matches
+          </p>
+        </div>
+
+        {/* Auth Card */}
+        <Card>
+          <CardContent className="pt-6">
+            {authMessage && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+                {authMessage}
+              </div>
+            )}
+
+            {authError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {authError}
+              </div>
+            )}
+
+            <Tabs value={authTab} onValueChange={(v) => setAuthTab(v as 'signin' | 'signup')}>
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="signin" className="flex items-center gap-2">
+                  <LogIn className="w-4 h-4" />
+                  Sign In
+                </TabsTrigger>
+                <TabsTrigger value="signup" className="flex items-center gap-2">
+                  <UserPlus className="w-4 h-4" />
+                  Sign Up
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Sign In Form */}
+              <TabsContent value="signin">
+                <form onSubmit={handleSignIn} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signin-email">Email</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="signin-email"
+                        type="email"
+                        placeholder="your@email.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="signin-password">Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="signin-password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-green-600 hover:bg-green-700"
+                    disabled={authLoading}
+                  >
+                    {authLoading ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                    ) : (
+                      <LogIn className="w-4 h-4 mr-2" />
+                    )}
+                    Sign In
+                  </Button>
+                </form>
+              </TabsContent>
+
+              {/* Sign Up Form */}
+              <TabsContent value="signup">
+                <form onSubmit={handleSignUp} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-name">Full Name</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="signup-name"
+                        type="text"
+                        placeholder="John Doe"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-email">Email</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="signup-email"
+                        type="email"
+                        placeholder="your@email.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-password">Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="signup-password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="pl-10"
+                        minLength={6}
+                        required
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Minimum 6 characters
+                    </p>
+                  </div>
+
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-green-600 hover:bg-green-700"
+                    disabled={authLoading}
+                  >
+                    {authLoading ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                    ) : (
+                      <UserPlus className="w-4 h-4 mr-2" />
+                    )}
+                    Create Account
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+
+        {/* Footer */}
+        <p className="text-center text-xs text-muted-foreground mt-6">
+          By signing in, you agree to our terms of service
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function Index() {
   const { profile } = useAuth();
   const [standings, setStandings] = useState<Standing[]>([]);
@@ -55,15 +291,19 @@ export default function Index() {
   useEffect(() => {
     if (profile?.id) {
       fetchDashboardData();
+    } else {
+      // If no profile (logged out), stop showing the loader
+      setLoading(false);
     }
   }, [profile?.id]);
 
   const fetchDashboardData = async () => {
     if (!profile?.id) return;
+    const supabaseAny = supabase as any;
     
     try {
       // Get user's teams
-      const { data: teamMembers } = await supabase
+      const { data: teamMembers } = await supabaseAny
         .from('team_members')
         .select('team_id')
         .eq('user_id', profile.id);
@@ -73,7 +313,7 @@ export default function Index() {
 
       // Get standings for user's divisions
       if (teamIds.length > 0) {
-        const { data: teams } = await supabase
+        const { data: teams } = await supabaseAny
           .from('teams')
           .select('division_id')
           .in('id', teamIds);
@@ -81,7 +321,7 @@ export default function Index() {
         const divisionIds = [...new Set(teams?.map(t => t.division_id).filter(Boolean))];
         
         if (divisionIds.length > 0) {
-          const { data: standingsData } = await supabase
+          const { data: standingsData } = await supabaseAny
             .from('standings')
             .select(`
               team_id,
@@ -168,6 +408,11 @@ export default function Index() {
         <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
+  }
+
+  // Show auth UI if not logged in
+  if (!profile) {
+    return <AuthUI />;
   }
 
   return (
@@ -334,7 +579,7 @@ export default function Index() {
               <Trophy className="w-4 h-4" />
               League Standings
             </CardTitle>
-            <Link to="/leagues">
+            <Link to="/standings">
               <Button variant="ghost" size="sm" className="text-xs h-7 px-2">
                 Full Table
                 <ChevronRight className="w-3 h-3 ml-1" />

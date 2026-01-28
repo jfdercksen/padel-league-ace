@@ -24,7 +24,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import Header from '@/components/Header';
 
 interface Team {
   id: string;
@@ -233,15 +232,10 @@ const ManageTeam = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center py-8">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-lg text-muted-foreground">Loading team details...</p>
-            </div>
-          </div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-lg text-muted-foreground">Loading team details...</p>
         </div>
       </div>
     );
@@ -249,44 +243,38 @@ const ManageTeam = () => {
 
   if (!team) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8 text-center">
-          <h2 className="text-2xl font-bold text-red-600 mb-4">Team Not Found</h2>
-          <p className="text-muted-foreground mb-4">The team you're looking for doesn't exist or you don't have permission to manage it.</p>
-          <Button onClick={() => navigate('/teams')}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Teams
-          </Button>
-        </div>
+      <div className="text-center space-y-4">
+        <h2 className="text-2xl font-bold text-red-600">Team Not Found</h2>
+        <p className="text-muted-foreground">The team you're looking for doesn't exist or you don't have permission to manage it.</p>
+        <Button onClick={() => navigate('/teams')}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Teams
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-      <Header />
-      
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="flex items-center gap-4 mb-8">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => navigate('/teams')}
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Teams
-            </Button>
-            <div className="flex-1">
-              <h2 className="text-3xl font-bold">Manage Team</h2>
-              <p className="text-muted-foreground">Manage your team settings and view league registrations</p>
-            </div>
-            <Badge variant="default">
-              Complete Team
-            </Badge>
+    <div className="space-y-6">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-8">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => navigate('/teams')}
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Teams
+          </Button>
+          <div className="flex-1">
+            <h2 className="text-3xl font-bold">Manage Team</h2>
+            <p className="text-muted-foreground">Manage your team settings and view league registrations</p>
           </div>
+          <Badge variant="default">
+            Complete Team
+          </Badge>
+        </div>
 
           {/* Messages */}
           {error && (
@@ -686,7 +674,6 @@ const ManageTeam = () => {
               </div>
             </CardContent>
           </Card>
-        </div>
       </div>
     </div>
   );

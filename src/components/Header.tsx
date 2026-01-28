@@ -1,120 +1,119 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Trophy, LogOut, Home, Users, Calendar, Settings } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
+import {
+  Home,
+  Users,
+  Calendar,
+  Trophy,
+  TrendingUp,
+  User,
+  LogOut,
+  Settings
+} from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
-const Header = () => {
-  const { profile, signOut } = useAuth();
+export default function Header() {
+  const { profile } = useAuth();
   const location = useLocation();
 
-  const navigationTabs = [
+  if (!profile) return null;
+
+  const navItems = [
     { path: '/', label: 'Home', icon: Home },
     { path: '/teams', label: 'Teams', icon: Users },
     { path: '/matches', label: 'Matches', icon: Calendar },
     { path: '/leagues', label: 'Leagues', icon: Trophy },
+    { path: '/standings', label: 'Standings', icon: TrendingUp },
   ];
 
-  if (profile?.role === 'super_admin') {
-    navigationTabs.push({ path: '/admin', label: 'Admin', icon: Settings });
-  }
-
-  const isActiveTab = (path: string) => {
+  const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
   };
 
   const handleSignOut = async () => {
-    await signOut();
+    await supabase.auth.signOut();
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <header className="hidden md:block sticky top-0 z-50 bg-white border-b shadow-sm">
       <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-14 md:h-16">
+        <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
-              <Trophy className="w-5 h-5 text-white" />
+            <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+              <Trophy className="w-4 h-4 text-white" />
             </div>
-            <div className="hidden sm:block">
-              <h1 className="text-lg font-bold text-gray-900">Padel League</h1>
-            </div>
+            <span className="font-bold text-lg">Padel League</span>
           </Link>
 
-          {/* Desktop Navigation - Hidden on mobile */}
-          <nav className="hidden md:flex items-center space-x-1">
-            {navigationTabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = isActiveTab(tab.path);
+          {/* Navigation Links */}
+          <nav className="flex items-center gap-1">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active = isActive(item.path);
+              
               return (
-                <Link
-                  key={tab.path}
-                  to={tab.path}
-                  className={`
-                    flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors
-                    ${isActive 
-                      ? 'text-green-600 bg-green-50' 
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                    }
-                  `}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{tab.label}</span>
+                <Link key={item.path} to={item.path}>
+                  <Button
+                    variant={active ? "default" : "ghost"}
+                    size="sm"
+                    className={active ? "bg-green-600 hover:bg-green-700" : ""}
+                  >
+                    <Icon className="w-4 h-4 mr-2" />
+                    {item.label}
+                  </Button>
                 </Link>
               );
             })}
           </nav>
 
-          {/* User Info */}
-          <div className="flex items-center gap-2">
-            {profile && (
-              <>
-                {/* Mobile: role badge + quick sign out */}
-                <div className="md:hidden flex items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">
-                    {profile.role === 'super_admin' ? 'Admin' :
-                     profile.role === 'league_admin' ? 'League' : 
-                     'Player'}
-                  </Badge>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleSignOut}
-                    className="px-2"
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </Button>
-                </div>
-                
-                {/* Desktop: Full user info */}
-                <div className="hidden md:flex items-center gap-3">
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">
-                      {profile.full_name}
-                    </p>
-                    <Badge variant="secondary" className="text-xs">
-                      {profile.role === 'super_admin' ? 'Super Admin' :
-                       profile.role === 'league_admin' ? 'League Admin' : 
-                       'Player'}
-                    </Badge>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSignOut}
-                  >
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Sign Out
-                  </Button>
-                </div>
-              </>
+          {/* User Menu */}
+          <div className="flex items-center gap-3">
+            {/* Role Badge */}
+            {profile.role === 'super_admin' && (
+              <Badge variant="destructive" className="text-xs">
+                Super Admin
+              </Badge>
             )}
+            {profile.role === 'league_admin' && (
+              <Badge className="bg-blue-100 text-blue-700 text-xs">
+                League Admin
+              </Badge>
+            )}
+
+            {/* Admin Panel Link */}
+            {(profile.role === 'super_admin' || profile.role === 'league_admin') && (
+              <Link to="/admin">
+                <Button variant="outline" size="sm">
+                  <Settings className="w-4 h-4 mr-2" />
+                  Admin
+                </Button>
+              </Link>
+            )}
+
+            {/* Profile Link */}
+            <Link to="/profile">
+              <Button variant="ghost" size="sm">
+                <User className="w-4 h-4 mr-2" />
+                {profile.full_name?.split(' ')[0] || 'Profile'}
+              </Button>
+            </Link>
+
+            {/* Sign Out */}
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={handleSignOut}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       </div>
     </header>
   );
-};
-
-export default Header;
+}

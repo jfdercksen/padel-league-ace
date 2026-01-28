@@ -12,7 +12,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ArrowLeft, Trophy, Users, Calendar, Settings, Pencil, Trash2, UserPlus, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import Header from '@/components/Header';
 import { useToast } from '@/components/ui/use-toast';
 import Leaderboard from '@/components/Leaderboard';
 
@@ -1526,15 +1525,10 @@ const ManageLeague = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center py-16">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-lg text-muted-foreground">Loading league information...</p>
-            </div>
-          </div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-lg text-muted-foreground">Loading league information...</p>
         </div>
       </div>
     );
@@ -1542,49 +1536,39 @@ const ManageLeague = () => {
 
   if (!league) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center py-16">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold mb-4">League Not Found</h2>
-              <p className="text-muted-foreground mb-6">
-                The league you're looking for doesn't exist or you don't have permission to view it.
-              </p>
-              <Link to="/">
-                <Button>Return to Home</Button>
-              </Link>
-            </div>
-          </div>
-        </div>
+      <div className="text-center space-y-4">
+        <h2 className="text-2xl font-bold">League Not Found</h2>
+        <p className="text-muted-foreground">
+          The league you're looking for doesn't exist or you don't have permission to view it.
+        </p>
+        <Link to="/">
+          <Button>Return to Home</Button>
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-      <Header />
-
-      <div className="container mx-auto px-4 py-8">
-        {/* Header Section */}
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
-            <Link to="/leagues">
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Leagues
-              </Button>
-            </Link>
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
-                <Settings className="w-6 h-6 sm:w-8 sm:h-8" />
-                Manage League
-              </h2>
-              <p className="text-sm sm:text-base text-muted-foreground">
-                Configure and manage {league.name}
-              </p>
-            </div>
+    <div className="space-y-6">
+      {/* Header Section */}
+      <div className="mb-8">
+        <div className="flex items-center gap-4 mb-4">
+          <Link to="/leagues">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Leagues
+            </Button>
+          </Link>
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+              <Settings className="w-6 h-6 sm:w-8 sm:h-8" />
+              Manage League
+            </h2>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              Configure and manage {league.name}
+            </p>
           </div>
+        </div>
 
           <Card className="mb-6">
             <CardContent className="pt-6">
@@ -3224,7 +3208,6 @@ const ManageLeague = () => {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
     </div>
   );
 };

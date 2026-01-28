@@ -7,7 +7,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Users, Mail, Loader2, Plus, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import Header from '@/components/Header';
 import { useNavigate } from 'react-router-dom';
 
 const CreateTeam = () => {
@@ -87,60 +86,51 @@ const CreateTeam = () => {
   // Redirect if not a player
   if (!profile || profile.role !== 'player') {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8 text-center">
-          <h2 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h2>
-          <p className="text-muted-foreground">Only players can create teams.</p>
-        </div>
+      <div className="text-center space-y-3">
+        <h2 className="text-2xl font-bold text-red-600">Access Denied</h2>
+        <p className="text-muted-foreground">Only players can create teams.</p>
       </div>
     );
   }
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8">
-          <Card className="max-w-2xl mx-auto">
-            <CardContent className="flex flex-col items-center justify-center py-8 text-center">
-              <Users className="w-16 h-16 text-green-500 mb-4" />
-              <h2 className="text-2xl font-bold text-green-600 mb-2">Team Created Successfully!</h2>
-              <p className="text-muted-foreground mb-4">
-                Your padel team "{formData.teamName}" has been created.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Redirecting to your teams...
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+      <div className="space-y-6">
+        <Card className="max-w-2xl mx-auto">
+          <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+            <Users className="w-16 h-16 text-green-500 mb-4" />
+            <h2 className="text-2xl font-bold text-green-600 mb-2">Team Created Successfully!</h2>
+            <p className="text-muted-foreground mb-4">
+              Your padel team "{formData.teamName}" has been created.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Redirecting to your teams...
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-court-surface/20 to-background">
-      <Header />
-      
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-2xl mx-auto">
-          <div className="flex items-center gap-4 mb-8">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => navigate('/teams')}
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Teams
-            </Button>
-            <div>
-              <h2 className="text-3xl font-bold mb-2">Create New Team</h2>
-              <p className="text-muted-foreground">
-                Form a padel team with your playing partner
-              </p>
-            </div>
+    <div className="space-y-6">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex items-center gap-4 mb-8">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => navigate('/teams')}
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Teams
+          </Button>
+          <div>
+            <h2 className="text-3xl font-bold mb-2">Create New Team</h2>
+            <p className="text-muted-foreground">
+              Form a padel team with your playing partner
+            </p>
           </div>
+        </div>
 
           {error && (
             <Alert className="mb-6 border-red-200 bg-red-50">
@@ -241,7 +231,6 @@ const CreateTeam = () => {
               </Button>
             </div>
           </form>
-        </div>
       </div>
     </div>
   );
