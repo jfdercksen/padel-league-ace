@@ -3,16 +3,15 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Calendar, Clock, MapPin, Trophy, CheckCircle, XCircle, MessageSquare } from 'lucide-react';
+import { AlertCircle, Calendar, Clock, MapPin, Trophy, CheckCircle, XCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import ScoreRecordingModal from '@/components/ScoreRecordingModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-
-import { Match } from '@/types/match';
 
 interface MatchConfirmation {
   id: string;
@@ -21,17 +20,24 @@ interface MatchConfirmation {
   status: string;
   reschedule_reason?: string | null;
   responded_at?: string | null;
+  proposed_date?: string | null;
+  proposed_time?: string | null;
+  proposal_message?: string | null;
+  reschedule_round?: number;
   otherTeamConfirmation?: {
     id: string;
     status: string;
     responded_at?: string | null;
+    proposed_date?: string | null;
+    proposed_time?: string | null;
+    proposal_message?: string | null;
   } | null;
   otherTeamName?: string;
   myTeamName?: string;
   match: {
     id: string;
     scheduled_date: string;
-    scheduled_time: string;
+    scheduled_time: string | null;
     venue: string | null;
     status: string;
     team1_id: string;
@@ -43,20 +49,25 @@ interface MatchConfirmation {
   };
 }
 
-//interface Match {
-  //id: string;
-  //scheduled_date: string;
-  //scheduled_time: string | null;
-  //venue: string | null;
-  //status: string;
-  //team1_score: number | null;
-  //team2_score: number | null;
-  //winner_team_id: string | null;
-  //team1: { name: string };
-  //team2: { name: string };
-  //league: { name: string };
-  //division: { name: string };
-//}
+interface Match {
+  id: string;
+  scheduled_date: string;
+  scheduled_time: string | null;
+  venue: string | null;
+  status: string;
+  team1_score: number | null;
+  team2_score: number | null;
+  winner_team_id: string | null;
+  team1_id?: string;
+  team2_id?: string;
+  team1: { id?: string; name: string };
+  team2: { id?: string; name: string };
+  league: { name: string };
+  division: { 
+    name: string;
+    level?: number;
+  };
+}
 
 
 const Matches = () => {
@@ -71,7 +82,12 @@ const Matches = () => {
   const [allMatches, setAllMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
-  const [rescheduleForm, setRescheduleForm] = useState({ confirmationId: '', reason: '' });
+  const [rescheduleForm, setRescheduleForm] = useState({ 
+    confirmationId: '', 
+    reason: '',
+    proposedDate: '',
+    proposedTime: ''
+  });
   const [showRescheduleForm, setShowRescheduleForm] = useState<string | null>(null);
   const [scoreModalOpen, setScoreModalOpen] = useState(false);
   const [selectedMatchForScoring, setSelectedMatchForScoring] = useState<Match | null>(null);
@@ -113,7 +129,12 @@ const Matches = () => {
         match_id,
         team_id,
         status,
+        reschedule_reason,
         responded_at,
+        proposed_date,
+        proposed_time,
+        proposal_message,
+        reschedule_round,
         match:matches (
           id,
           scheduled_date,
@@ -170,7 +191,10 @@ const Matches = () => {
           otherTeamConfirmation: otherConfirmation ? {
             id: otherConfirmation.confirmation_id,
             status: otherConfirmation.status,
-            responded_at: otherConfirmation.responded_at
+            responded_at: otherConfirmation.responded_at,
+            proposed_date: otherConfirmation.proposed_date,
+            proposed_time: otherConfirmation.proposed_time,
+            proposal_message: otherConfirmation.proposal_message
           } : null,
           otherTeamName,
           myTeamName
@@ -185,6 +209,9 @@ const Matches = () => {
       if (conf.status === 'pending') return true;
       // Show if user confirmed but other team hasn't (waiting state)
       if (conf.status === 'confirmed' && conf.otherTeamConfirmation?.status === 'pending') return true;
+      // Show reschedule statuses
+      if (conf.status === 'reschedule_proposed') return true;
+      if (conf.status === 'reschedule_pending') return true;
       return false;
     });
 
@@ -322,34 +349,96 @@ const Matches = () => {
     }
   };
 
-  const handleRequestReschedule = async (confirmationId: string) => {
-    if (!rescheduleForm.reason.trim()) {
-      alert('Please provide a reason for rescheduling');
+  const handleProposeReschedule = async (confirmationId: string) => {
+    if (!rescheduleForm.proposedDate) {
+      alert('Please select a proposed date');
       return;
     }
 
     setProcessing(confirmationId);
     try {
-      const supabaseAny = supabase as any;
-      
-      const { error } = await supabaseAny
-        .from('match_confirmations')
-        .update({ 
-          status: 'reschedule_requested',
-          reschedule_reason: rescheduleForm.reason,
-          responded_at: new Date().toISOString()
-        })
-        .eq('id', confirmationId);
+      const { data, error } = await (supabase as any).rpc('propose_reschedule', {
+        p_confirmation_id: confirmationId,
+        p_user_id: profile?.id,
+        p_proposed_date: rescheduleForm.proposedDate,
+        p_proposed_time: rescheduleForm.proposedTime || null,
+        p_message: rescheduleForm.reason || null
+      });
 
       if (error) throw error;
 
-      // Remove from pending list
-      setPendingConfirmations(prev => prev.filter(c => c.id !== confirmationId));
-      setShowRescheduleForm(null);
-      setRescheduleForm({ confirmationId: '', reason: '' });
-      
+      console.log('Propose reschedule result:', data);
+
+      if (data?.success) {
+        setShowRescheduleForm(null);
+        setRescheduleForm({ confirmationId: '', reason: '', proposedDate: '', proposedTime: '' });
+        await fetchMatches();
+      } else {
+        alert(data?.message || 'Failed to propose reschedule');
+      }
     } catch (error) {
-      console.error('Error requesting reschedule:', error);
+      console.error('Error proposing reschedule:', error);
+      alert('Failed to propose reschedule');
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleAcceptReschedule = async (confirmationId: string) => {
+    setProcessing(confirmationId);
+    try {
+      const { data, error } = await (supabase as any).rpc('accept_reschedule', {
+        p_confirmation_id: confirmationId,
+        p_user_id: profile?.id
+      });
+
+      if (error) throw error;
+
+      console.log('Accept reschedule result:', data);
+
+      if (data?.success) {
+        await fetchMatches();
+      } else {
+        alert(data?.message || 'Failed to accept reschedule');
+      }
+    } catch (error) {
+      console.error('Error accepting reschedule:', error);
+      alert('Failed to accept reschedule');
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleCounterPropose = async (confirmationId: string) => {
+    if (!rescheduleForm.proposedDate) {
+      alert('Please select a proposed date');
+      return;
+    }
+
+    setProcessing(confirmationId);
+    try {
+      const { data, error } = await (supabase as any).rpc('counter_propose_reschedule', {
+        p_confirmation_id: confirmationId,
+        p_user_id: profile?.id,
+        p_proposed_date: rescheduleForm.proposedDate,
+        p_proposed_time: rescheduleForm.proposedTime || null,
+        p_message: rescheduleForm.reason || null
+      });
+
+      if (error) throw error;
+
+      console.log('Counter propose result:', data);
+
+      if (data?.success) {
+        setShowRescheduleForm(null);
+        setRescheduleForm({ confirmationId: '', reason: '', proposedDate: '', proposedTime: '' });
+        await fetchMatches();
+      } else {
+        alert(data?.message || 'Failed to counter-propose');
+      }
+    } catch (error) {
+      console.error('Error counter-proposing:', error);
+      alert('Failed to counter-propose');
     } finally {
       setProcessing(null);
     }
@@ -592,10 +681,56 @@ const Matches = () => {
                   const userHasAccepted = confirmation.status === 'confirmed';
                   const otherTeamHasAccepted = confirmation.otherTeamConfirmation?.status === 'confirmed';
                   const isWaitingForOther = userHasAccepted && !otherTeamHasAccepted;
+
+                  // Reschedule states
+                  const hasProposedReschedule = confirmation.status === 'reschedule_proposed';
+                  const hasReceivedProposal = confirmation.status === 'reschedule_pending';
+
+                  // Determine card style based on status
+                  const getCardStyle = () => {
+                    if (hasReceivedProposal) return 'border-l-purple-500 bg-purple-50/30';
+                    if (hasProposedReschedule) return 'border-l-orange-500 bg-orange-50/30';
+                    if (isWaitingForOther) return 'border-l-blue-500 bg-blue-50/30';
+                    return 'border-l-yellow-500';
+                  };
+
+                  // Determine status badge
+                  const getStatusBadge = () => {
+                    if (hasReceivedProposal) {
+                      return (
+                        <Badge className="bg-purple-100 text-purple-800 w-fit">
+                          <Calendar className="w-3 h-3 mr-1" />
+                          New Date Proposed
+                        </Badge>
+                      );
+                    }
+                    if (hasProposedReschedule) {
+                      return (
+                        <Badge className="bg-orange-100 text-orange-800 w-fit">
+                          <Clock className="w-3 h-3 mr-1" />
+                          Awaiting Response
+                        </Badge>
+                      );
+                    }
+                    if (isWaitingForOther) {
+                      return (
+                        <Badge className="bg-blue-100 text-blue-800 w-fit">
+                          <Clock className="w-3 h-3 mr-1" />
+                          Waiting for {confirmation.otherTeamName}
+                        </Badge>
+                      );
+                    }
+                    return (
+                      <Badge className="bg-yellow-100 text-yellow-800 w-fit">
+                        Pending Your Confirmation
+                      </Badge>
+                    );
+                  };
+
                   return (
                     <Card
                       key={confirmation.id}
-                      className={`border-l-4 ${isWaitingForOther ? 'border-l-blue-500 bg-blue-50/30' : 'border-l-yellow-500'}`}
+                      className={`border-l-4 ${getCardStyle()}`}
                     >
                       <CardContent className="p-4 sm:p-6">
                         <div className="space-y-4">
@@ -609,75 +744,90 @@ const Matches = () => {
                                 {confirmation.match.league.name} • {confirmation.match.division.name}
                               </p>
                             </div>
-                            {/* Status Badge */}
-                            {isWaitingForOther ? (
-                              <Badge className="bg-blue-100 text-blue-800 w-fit">
-                                <Clock className="w-3 h-3 mr-1" />
-                                Waiting for {confirmation.otherTeamName}
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-yellow-100 text-yellow-800 w-fit">
-                                Pending Your Confirmation
-                              </Badge>
-                            )}
+                            {getStatusBadge()}
                           </div>
 
-                          {/* Acceptance Status Indicators */}
-                          <div className="flex gap-4 p-3 bg-gray-50 rounded-lg">
-                            <div className="flex items-center gap-2">
-                              {confirmation.myTeamName === confirmation.match.team1.name ? (
-                                <>
-                                  <div className={`w-3 h-3 rounded-full ${userHasAccepted ? 'bg-green-500' : 'bg-gray-300'}`} />
-                                  <span className="text-sm">{confirmation.match.team1.name}</span>
-                                  {userHasAccepted && <CheckCircle className="w-4 h-4 text-green-500" />}
-                                </>
-                              ) : (
-                                <>
-                                  <div className={`w-3 h-3 rounded-full ${otherTeamHasAccepted ? 'bg-green-500' : 'bg-gray-300'}`} />
-                                  <span className="text-sm">{confirmation.match.team1.name}</span>
-                                  {otherTeamHasAccepted && <CheckCircle className="w-4 h-4 text-green-500" />}
-                                </>
-                              )}
-                            </div>
-                            <span className="text-muted-foreground">vs</span>
-                            <div className="flex items-center gap-2">
-                              {confirmation.myTeamName === confirmation.match.team2.name ? (
-                                <>
-                                  <div className={`w-3 h-3 rounded-full ${userHasAccepted ? 'bg-green-500' : 'bg-gray-300'}`} />
-                                  <span className="text-sm">{confirmation.match.team2.name}</span>
-                                  {userHasAccepted && <CheckCircle className="w-4 h-4 text-green-500" />}
-                                </>
-                              ) : (
-                                <>
-                                  <div className={`w-3 h-3 rounded-full ${otherTeamHasAccepted ? 'bg-green-500' : 'bg-gray-300'}`} />
-                                  <span className="text-sm">{confirmation.match.team2.name}</span>
-                                  {otherTeamHasAccepted && <CheckCircle className="w-4 h-4 text-green-500" />}
-                                </>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Match Details */}
-                          <div className="bg-blue-50 p-4 rounded-lg">
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              <div className="flex items-center gap-2">
-                                <Calendar className="w-4 h-4 text-blue-600" />
-                                <span className="text-sm">
-                                  {new Date(confirmation.match.scheduled_date).toLocaleDateString()}
+                          {/* Current Match Details */}
+                          <div className="bg-gray-50 p-3 rounded-lg">
+                            <p className="text-xs text-muted-foreground mb-2">Current Schedule:</p>
+                            <div className="flex flex-wrap gap-3 text-sm">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="w-4 h-4 text-gray-500" />
+                                {new Date(confirmation.match.scheduled_date).toLocaleDateString()}
+                              </span>
+                              {confirmation.match.scheduled_time && (
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-4 h-4 text-gray-500" />
+                                  {confirmation.match.scheduled_time}
                                 </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Clock className="w-4 h-4 text-blue-600" />
-                                <span className="text-sm">{confirmation.match.scheduled_time || 'TBD'}</span>
-                              </div>
+                              )}
                               {confirmation.match.venue && (
-                                <div className="flex items-center gap-2">
-                                  <MapPin className="w-4 h-4 text-blue-600" />
-                                  <span className="text-sm">{confirmation.match.venue}</span>
-                                </div>
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="w-4 h-4 text-gray-500" />
+                                  {confirmation.match.venue}
+                                </span>
                               )}
                             </div>
                           </div>
+
+                          {/* Reschedule Proposal Display - When you received a proposal */}
+                          {hasReceivedProposal && confirmation.proposed_date && (
+                            <div className="bg-purple-50 border border-purple-200 p-4 rounded-lg space-y-3">
+                              <div className="flex items-center gap-2 text-purple-800">
+                                <AlertCircle className="w-5 h-5" />
+                                <span className="font-semibold">{confirmation.otherTeamName} proposed a new date:</span>
+                              </div>
+                              <div className="flex flex-wrap gap-3 text-sm font-medium">
+                                <span className="flex items-center gap-1 bg-white px-3 py-1 rounded">
+                                  <Calendar className="w-4 h-4 text-purple-600" />
+                                  {new Date(confirmation.proposed_date).toLocaleDateString()}
+                                </span>
+                                {confirmation.proposed_time && (
+                                  <span className="flex items-center gap-1 bg-white px-3 py-1 rounded">
+                                    <Clock className="w-4 h-4 text-purple-600" />
+                                    {confirmation.proposed_time}
+                                  </span>
+                                )}
+                              </div>
+                              {confirmation.proposal_message && (
+                                <p className="text-sm text-purple-700 italic">
+                                  "{confirmation.proposal_message}"
+                                </p>
+                              )}
+                              <p className="text-xs text-purple-600">
+                                Round {confirmation.reschedule_round || 1} of 3
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Reschedule Proposal Display - When you proposed */}
+                          {hasProposedReschedule && confirmation.proposed_date && (
+                            <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg space-y-2">
+                              <p className="text-sm text-orange-800">
+                                <span className="font-semibold">You proposed:</span>
+                              </p>
+                              <div className="flex flex-wrap gap-3 text-sm">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-4 h-4 text-orange-600" />
+                                  {new Date(confirmation.proposed_date).toLocaleDateString()}
+                                </span>
+                                {confirmation.proposed_time && (
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="w-4 h-4 text-orange-600" />
+                                    {confirmation.proposed_time}
+                                  </span>
+                                )}
+                              </div>
+                              {confirmation.proposal_message && (
+                                <p className="text-sm text-orange-700 italic">
+                                  "{confirmation.proposal_message}"
+                                </p>
+                              )}
+                              <p className="text-xs text-orange-600">
+                                Waiting for {confirmation.otherTeamName} to respond...
+                              </p>
+                            </div>
+                          )}
 
                           {/* Other team accepted message */}
                           {otherTeamHasAccepted && !userHasAccepted && (
@@ -700,64 +850,121 @@ const Matches = () => {
                           )}
 
                           {/* Reschedule Form */}
-                          {showRescheduleForm === confirmation.id ? (
+                          {showRescheduleForm === confirmation.id && (
                             <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-                              <Label htmlFor={`reason-${confirmation.id}`}>Reason for Rescheduling *</Label>
-                              <Textarea
-                                id={`reason-${confirmation.id}`}
-                                value={rescheduleForm.reason}
-                                onChange={(e) => setRescheduleForm(prev => ({ ...prev, reason: e.target.value }))}
-                                placeholder="Please explain why you need to reschedule this match..."
-                                rows={3}
-                              />
+                              <h5 className="font-medium">Propose New Date & Time</h5>
+                              
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor={`date-${confirmation.id}`}>Proposed Date *</Label>
+                                  <Input
+                                    id={`date-${confirmation.id}`}
+                                    type="date"
+                                    value={rescheduleForm.proposedDate}
+                                    onChange={(e) => setRescheduleForm(prev => ({ ...prev, proposedDate: e.target.value }))}
+                                    min={new Date().toISOString().split('T')[0]}
+                                    required
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor={`time-${confirmation.id}`}>Proposed Time</Label>
+                                  <Input
+                                    id={`time-${confirmation.id}`}
+                                    type="time"
+                                    value={rescheduleForm.proposedTime}
+                                    onChange={(e) => setRescheduleForm(prev => ({ ...prev, proposedTime: e.target.value }))}
+                                  />
+                                </div>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label htmlFor={`reason-${confirmation.id}`}>Message (optional)</Label>
+                                <Textarea
+                                  id={`reason-${confirmation.id}`}
+                                  value={rescheduleForm.reason}
+                                  onChange={(e) => setRescheduleForm(prev => ({ ...prev, reason: e.target.value }))}
+                                  placeholder="Let them know why you need to reschedule..."
+                                  rows={2}
+                                />
+                              </div>
+                              
                               <div className="flex gap-2">
                                 <Button
                                   size="sm"
-                                  onClick={() => handleRequestReschedule(confirmation.id)}
-                                  disabled={processing === confirmation.id || !rescheduleForm.reason.trim()}
+                                  onClick={() => hasReceivedProposal 
+                                    ? handleCounterPropose(confirmation.id)
+                                    : handleProposeReschedule(confirmation.id)
+                                  }
+                                  disabled={processing === confirmation.id || !rescheduleForm.proposedDate}
+                                  className="bg-purple-600 hover:bg-purple-700"
                                 >
-                                  <MessageSquare className="w-4 h-4 mr-2" />
-                                  Submit Request
+                                  {processing === confirmation.id ? (
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                                  ) : (
+                                    <Calendar className="w-4 h-4 mr-2" />
+                                  )}
+                                  {hasReceivedProposal ? 'Send Counter-Proposal' : 'Send Proposal'}
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => {
                                     setShowRescheduleForm(null);
-                                    setRescheduleForm({ confirmationId: '', reason: '' });
+                                    setRescheduleForm({ confirmationId: '', reason: '', proposedDate: '', proposedTime: '' });
                                   }}
                                 >
                                   Cancel
-                                </Button>                              
+                                </Button>
                               </div>
                             </div>
-                          ) : !isWaitingForOther && (
-                            /* Action Buttons - Only show if user hasn't accepted yet */
+                          )}
+
+                          {/* Action Buttons */}
+                          {!showRescheduleForm && (
                             <div className="flex flex-col sm:flex-row gap-3">
-                              <Button
-                                onClick={() => handleConfirmMatch(confirmation.id)}
-                                disabled={processing === confirmation.id}
-                                className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none"
-                              >
-                                {processing === confirmation.id ? (
-                                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                                ) : (
-                                  <CheckCircle className="w-4 h-4 mr-2" />
-                                )}
-                                Accept Match
-                              </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  setShowRescheduleForm(confirmation.id);
-                                  setRescheduleForm({ confirmationId: confirmation.id, reason: '' });
-                                }}
-                                disabled={processing === confirmation.id}
-                                className="flex-1 sm:flex-none"
-                              >
-                                <XCircle className="w-4 h-4 mr-2" />
-                                Request Reschedule
-                              </Button>
+                              {/* Accept/Confirm Button - Show for pending or received proposals */}
+                              {(confirmation.status === 'pending' || hasReceivedProposal) && (
+                                <Button
+                                  onClick={() => hasReceivedProposal 
+                                    ? handleAcceptReschedule(confirmation.id)
+                                    : handleConfirmMatch(confirmation.id)
+                                  }
+                                  disabled={processing === confirmation.id}
+                                  className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none"
+                                >
+                                  {processing === confirmation.id ? (
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                                  ) : (
+                                    <CheckCircle className="w-4 h-4 mr-2" />
+                                  )}
+                                  {hasReceivedProposal ? 'Accept New Date' : 'Accept Match'}
+                                </Button>
+                              )}
+                              
+                              {/* Reschedule/Counter-Propose Button */}
+                              {(confirmation.status === 'pending' || hasReceivedProposal) && (
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setShowRescheduleForm(confirmation.id);
+                                    setRescheduleForm({ 
+                                      confirmationId: confirmation.id, 
+                                      reason: '',
+                                      proposedDate: hasReceivedProposal && confirmation.proposed_date 
+                                        ? confirmation.proposed_date 
+                                        : '',
+                                      proposedTime: hasReceivedProposal && confirmation.proposed_time 
+                                        ? confirmation.proposed_time 
+                                        : ''
+                                    });
+                                  }}
+                                  disabled={processing === confirmation.id}
+                                  className="flex-1 sm:flex-none"
+                                >
+                                  <XCircle className="w-4 h-4 mr-2" />
+                                  {hasReceivedProposal ? 'Propose Different Date' : 'Request Reschedule'}
+                                </Button>
+                              )}
                             </div>
                           )}
                         </div>

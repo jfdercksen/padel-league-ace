@@ -12,15 +12,15 @@ import { supabase } from '@/integrations/supabase/client';
 // Update the Match interface to be more flexible
 interface Match {
   id: string;
-  team1: { name: string };
-  team2: { name: string };
-  team1_id: string;
-  team2_id: string;
-  league?: { name: string }; // Make optional
-  division: { name: string };
+  team1: { id?: string; name: string };
+  team2: { id?: string; name: string };
+  team1_id?: string;
+  team2_id?: string;
+  league?: { name: string };
+  division: { name: string; level?: number };
   scheduled_date: string;
-  scheduled_time?: string;
-  venue?: string;
+  scheduled_time?: string | null;
+  venue?: string | null;
 }
 
 interface ScoreRecordingModalProps {
@@ -220,6 +220,13 @@ const ScoreRecordingModal = ({ isOpen, onClose, match, onScoreRecorded }: ScoreR
 
       const team1SetWins = validation.team1SetWins || 0;
       const team2SetWins = validation.team2SetWins || 0;
+
+      if (!match.team1_id || !match.team2_id) {
+        setError('Missing team IDs for this match');
+        setSubmitting(false);
+        return;
+      }
+
       const winnerId = team1SetWins > team2SetWins ? match.team1_id : match.team2_id;
 
       console.log('=== MATCH UPDATE DEBUG ===');
